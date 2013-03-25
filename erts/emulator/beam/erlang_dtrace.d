@@ -100,9 +100,11 @@ provider erlang {
      * @param token_label for the sender's sequential trace token
      * @param token_previous count for the sender's sequential trace token
      * @param token_current count for the sender's sequential trace token
+     * @param ts timestamp
      */
     probe message__queued(char *receiver, uint32_t size, uint32_t queue_len,
-                        int token_label, int token_previous, int token_current);
+                        int token_label, int token_previous, int token_current,
+                        uint64_t ts);
 
     /**
      * Fired when a message is 'receive'd by a local process and removed

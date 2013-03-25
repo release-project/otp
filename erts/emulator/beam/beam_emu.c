@@ -1059,6 +1059,23 @@ init_emulator(void)
         DTRACE2(nif_return, process_name, mfa);                 \
     }
 
+#define DTRACE_MESSAGE_QUEUED(r, m, s)                          \
+    if (DTRACE_ENABLED(message_queued)) {                       \
+        DTRACE_CHARBUF(receiver_name, DTRACE_TERM_BUF_SIZE);    \
+        Sint tok_label = 0;                                     \
+        Sint tok_lastcnt = 0;                                   \
+        Sint tok_serial = 0;                                    \
+        dtrace_proc_str(r, receiver_name);                      \
+        if (s != NIL && is_tuple(s)) {                          \
+            tok_label = signed_val(SEQ_TRACE_T_LABEL(s));       \
+            tok_lastcnt = signed_val(SEQ_TRACE_T_LASTCNT(s));   \
+            tok_serial = signed_val(SEQ_TRACE_T_SERIAL(s));     \
+        }                                                       \
+        DTRACE7(message_queued, receiver_name, size_object(m),  \
+                r->msg.len, tok_label, tok_lastcnt, tok_serial, \
+                dtrace_ts());                                   \
+    }                                                
+
 #else /* USE_VM_PROBES */
 
 #define DTRACE_LOCAL_CALL(p, m, f, a)  do {} while (0)
@@ -1068,6 +1085,7 @@ init_emulator(void)
 #define DTRACE_BIF_RETURN(p, m, f, a)  do {} while (0)
 #define DTRACE_NIF_ENTRY(p, m, f, a)   do {} while (0)
 #define DTRACE_NIF_RETURN(p, m, f, a)  do {} while (0)
+#define DTRACE_MESSAGE_QUEUED(r, m, s)    do {} while (0)
 
 #endif /* USE_VM_PROBES */
 
@@ -2099,6 +2117,7 @@ void process_main(void)
      BeamInstr *next;
 
      PreFetch(0, next);
+     DTRACE_MESSAGE_QUEUED(c_p, am_timeout, NIL);
      if (IS_TRACED_FL(c_p, F_TRACE_RECEIVE)) {
 	 trace_receive(c_p, am_timeout);
      }
