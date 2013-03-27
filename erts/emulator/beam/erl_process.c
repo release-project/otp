@@ -7774,7 +7774,7 @@ erl_create_process(Process* parent, /* Parent of process (default group leader).
         DTRACE_CHARBUF(mfa, DTRACE_TERM_BUF_SIZE);
 
         dtrace_fun_decode(p, mod, func, arity, process_name, mfa);
-        DTRACE2(process_spawn, process_name, mfa);
+        DTRACE3(process_spawn, process_name, mfa, dtrace_ts());
     }
 #endif
 
