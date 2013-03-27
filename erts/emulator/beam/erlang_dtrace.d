@@ -255,10 +255,11 @@ provider erlang {
      * Fired when a process is spawned.
      *
      * @param p the PID (string form) of the new process.
+     * @param p2 the PID (string form) of the parent process.
      * @param mfa the m:f/a of the function
      * @param ts timestamp
      */
-    probe process__spawn(char *p, char *mfa, uint64_t ts);
+    probe process__spawn(char *p, char *p2, char *mfa, uint64_t ts);
 
     /**
      * Fired when a process is exiting.
