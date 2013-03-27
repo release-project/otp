@@ -158,8 +158,9 @@ provider erlang {
      * @param p the PID (string form) of the process
      * @param mfa the m:f/a of the function
      * @param depth the stack depth
+     * @param ts timestamp
      */
-    probe local__function__entry(char *p, char *mfa, int depth);
+    probe local__function__entry(char *p, char *mfa, int depth, uint64_t ts);
 
     /**
      * Fired whenever a user function is called externally
@@ -168,8 +169,9 @@ provider erlang {
      * @param p the PID (string form) of the process
      * @param mfa the m:f/a of the function
      * @param depth the stack depth
+     * @param ts timestamp
      */
-    probe global__function__entry(char *p, char *mfa, int depth);
+    probe global__function__entry(char *p, char *mfa, int depth, uint64_t ts);
 
     /**
      * Fired whenever a user function returns.
@@ -185,8 +187,9 @@ provider erlang {
      *
      * @param p the PID (string form) of the process
      * @param mfa the m:f/a of the function
+     * @param ts timestamp
      */
-    probe bif__entry(char *p, char *mfa);
+    probe bif__entry(char *p, char *mfa, uint64_t ts);
 
     /**
      * Fired whenever a Built In Function returns.
@@ -201,8 +204,9 @@ provider erlang {
      *
      * @param p the PID (string form) of the process
      * @param mfa the m:f/a of the function
+     * @param ts timestamp
      */
-    probe nif__entry(char *p, char *mfa);
+    probe nif__entry(char *p, char *mfa, uint64_t ts);
 
     /**
      * Fired whenever a Native Function returns.
