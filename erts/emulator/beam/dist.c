@@ -860,6 +860,10 @@ erts_dsig_send_msg(ErtsDSigData *dsdp, Eterm remote, Eterm message)
             tok_lastcnt = signed_val(SEQ_TRACE_T_LASTCNT(token));
             tok_serial = signed_val(SEQ_TRACE_T_SERIAL(token));
         }
+        DTRACE7(message_send, sender_name, receiver_name,
+                msize, tok_label, tok_lastcnt, tok_serial, dtrace_ts());
+        DTRACE7(message_send_remote, sender_name, node_name, receiver_name,
+                msize, tok_label, tok_lastcnt, tok_serial);
     }
 #endif
 
@@ -868,10 +872,6 @@ erts_dsig_send_msg(ErtsDSigData *dsdp, Eterm remote, Eterm message)
 		     make_small(DOP_SEND_TT), am_Cookie, remote, token);
     else
 	ctl = TUPLE3(&ctl_heap[0], make_small(DOP_SEND), am_Cookie, remote);
-    DTRACE6(message_send, sender_name, receiver_name,
-            msize, tok_label, tok_lastcnt, tok_serial);
-    DTRACE7(message_send_remote, sender_name, node_name, receiver_name,
-            msize, tok_label, tok_lastcnt, tok_serial);
     res = dsig_send(dsdp, ctl, message, 0);
     UnUseTmpHeapNoproc(5);
     return res;
@@ -918,6 +918,10 @@ erts_dsig_send_reg_msg(ErtsDSigData *dsdp, Eterm remote_name, Eterm message)
             tok_lastcnt = signed_val(SEQ_TRACE_T_LASTCNT(token));
             tok_serial = signed_val(SEQ_TRACE_T_SERIAL(token));
         }
+        DTRACE7(message_send, sender_name, receiver_name,
+                msize, tok_label, tok_lastcnt, tok_serial, dtrace_ts());
+        DTRACE7(message_send_remote, sender_name, node_name, receiver_name,
+                msize, tok_label, tok_lastcnt, tok_serial);
     }
 #endif
 
@@ -927,10 +931,6 @@ erts_dsig_send_reg_msg(ErtsDSigData *dsdp, Eterm remote_name, Eterm message)
     else
 	ctl = TUPLE4(&ctl_heap[0], make_small(DOP_REG_SEND),
 		     sender->common.id, am_Cookie, remote_name);
-    DTRACE6(message_send, sender_name, receiver_name,
-            msize, tok_label, tok_lastcnt, tok_serial);
-    DTRACE7(message_send_remote, sender_name, node_name, receiver_name,
-            msize, tok_label, tok_lastcnt, tok_serial);
     res = dsig_send(dsdp, ctl, message, 0);
     UnUseTmpHeapNoproc(6);
     return res;

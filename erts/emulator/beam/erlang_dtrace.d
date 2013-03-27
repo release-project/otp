@@ -57,9 +57,11 @@ provider erlang {
      * @param token_label for the sender's sequential trace token
      * @param token_previous count for the sender's sequential trace token
      * @param token_current count for the sender's sequential trace token
+     * @param ts  timestamp
      */
     probe message__send(char *sender, char *receiver, uint32_t size,
-                        int token_label, int token_previous, int token_current);
+                        int token_label, int token_previous, int token_current,
+                        uint64_t ts);
 
     /**
      * Fired when a message is sent from a local process to a remote process.
