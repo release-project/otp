@@ -1022,7 +1022,8 @@ init_emulator(void)
         int depth = STACK_START(p) - STACK_TOP(p);              \
         dtrace_fun_decode(p, m, f, a,                           \
                           process_name, mfa);                   \
-        DTRACE3(function_return, process_name, mfa, depth);     \
+        DTRACE4(function_return, process_name, mfa, depth,      \
+                dtrace_ts());                                   \
     }
 
 #define DTRACE_BIF_ENTRY(p, m, f, a)                            \
@@ -1040,7 +1041,7 @@ init_emulator(void)
         DTRACE_CHARBUF(mfa, DTRACE_TERM_BUF_SIZE);              \
         dtrace_fun_decode(p, m, f, a,                           \
                           process_name, mfa);                   \
-        DTRACE2(bif_return, process_name, mfa);                 \
+        DTRACE3(bif_return, process_name, mfa, dtrace_ts());    \
     }
 
 #define DTRACE_NIF_ENTRY(p, m, f, a)                            \
@@ -1058,7 +1059,7 @@ init_emulator(void)
         DTRACE_CHARBUF(mfa, DTRACE_TERM_BUF_SIZE);              \
         dtrace_fun_decode(p, m, f, a,                           \
                           process_name, mfa);                   \
-        DTRACE2(nif_return, process_name, mfa);                 \
+        DTRACE3(nif_return, process_name, mfa, dtrace_ts());    \
     }
 
 #define DTRACE_MESSAGE_QUEUED(r, m, s)                          \
