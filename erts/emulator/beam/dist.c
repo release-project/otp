@@ -1238,6 +1238,15 @@ int erts_net_message(Port *prt,
 
 	if (IS_TRACED_FL(rp, F_TRACE_PROCS))
 	    trace_proc(NULL, rp, am_getting_linked, from);
+#ifdef USE_VM_PROBES
+        if (DTRACE_ENABLED(process_getting_linked)) { 
+            DTRACE_CHARBUF(process_name, DTRACE_TERM_BUF_SIZE);
+            DTRACE_CHARBUF(linked_process_name, DTRACE_TERM_BUF_SIZE);
+            dtrace_proc_str(rp, process_name);
+            dtrace_pid_str(from, linked_process_name);
+            DTRACE3(process_getting_linked, process_name, linked_process_name, dtrace_ts());
+        }
+#endif
 
 	erts_smp_proc_unlock(rp, ERTS_PROC_LOCK_LINK);
 	break;

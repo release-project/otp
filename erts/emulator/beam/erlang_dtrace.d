@@ -355,6 +355,15 @@ provider erlang {
     probe process__link(char *p, char *p2, uint64_t ts);
 
     /**
+     * Fired when a process gets linked to another process.
+     *
+     * @param p the PID (string form) of the process
+     * @param p2 the PID (string form) of the process that p gets linked to
+     * @param ts timestamp
+     */
+    probe process__getting_linked(char *p, char *p2, uint64_t ts);
+
+    /**
      * Fired when a process removes the link to another process.
      *
      * @param p the PID (string form) of the process

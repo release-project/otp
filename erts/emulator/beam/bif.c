@@ -129,6 +129,16 @@ static int insert_internal_link(Process* p, Eterm rpid)
     if (IS_TRACED_FL(rp, F_TRACE_PROCS))
 	trace_proc(p, rp, am_getting_linked, p->common.id);
 
+#ifdef USE_VM_PROBES
+    if (DTRACE_ENABLED(process_getting_linked)) {
+        DTRACE_CHARBUF(process_name, DTRACE_TERM_BUF_SIZE);
+        DTRACE_CHARBUF(linked_process_name, DTRACE_TERM_BUF_SIZE);
+        dtrace_proc_str(rp, process_name);
+        dtrace_proc_str(p, linked_process_name);
+        DTRACE3(process_getting_linked, process_name, linked_process_name, dtrace_ts());
+    }
+#endif
+
     if (p == rp)
 	erts_smp_proc_unlock(p, rp_locks & ~ERTS_PROC_LOCK_MAIN);
     else {
