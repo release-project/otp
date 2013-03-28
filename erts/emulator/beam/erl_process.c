@@ -8780,7 +8780,7 @@ erts_do_exit_process(Process* p, Eterm reason)
 
         dtrace_proc_str(p, process_buf);
         erts_snprintf(reason_buf, DTRACE_TERM_BUF_SIZE - 1, "%T", reason);
-        DTRACE2(process_exit, process_buf, reason_buf);
+        DTRACE3(process_exit, process_buf, reason_buf, dtrace_ts());
     }
 #endif
 

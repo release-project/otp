@@ -266,8 +266,9 @@ provider erlang {
      *
      * @param p the PID (string form) of the exiting process
      * @param reason the reason for the exit (may be truncated)
+     * @param ts timestamp
      */
-    probe process__exit(char *p, char *reason);
+    probe process__exit(char *p, char *reason, uint64_t ts);
 
     /**
      * Fired when exit signal is delivered to a local process.
