@@ -354,6 +354,15 @@ provider erlang {
      */ 
     probe process__link(char *p, char *p2, uint64_t ts);
 
+    /**
+     * Fired when a process removes the link to another process.
+     *
+     * @param p the PID (string form) of the process
+     * @param p2 the PID (string form) of the process that p removes the link to
+     * @param ts timestamp
+     */
+    probe process__unlink(char *p, char *p2, uint64_t ts);
+
     /* network distribution */
 
     /**
@@ -490,6 +499,15 @@ provider erlang {
      * @param ts timestamp
      */
     probe port__link(char *p, char *port, uint64_t ts);
+
+    /**
+     * Fired when a process removes the link to a port.
+     *
+     * @param p the PID (string form) of the process
+     * @param port the ID of the port that p removes the link to
+     * @param ts timestamp
+     */
+    probe port__unlink(char *p, char *port, uint64_t ts);
 
     /* drivers */
 

@@ -979,6 +979,25 @@ BIF_RETTYPE unlink_1(BIF_ALIST_1)
 	trace_proc(BIF_P, BIF_P, am_unlink, BIF_ARG_1);
     }
 
+#ifdef USE_VM_PROBES
+    if (DTRACE_ENABLED(process_unlink) &&
+        (is_internal_pid(BIF_ARG_1) || is_external_pid(BIF_ARG_1))) {
+        DTRACE_CHARBUF(process_name, DTRACE_TERM_BUF_SIZE);
+        DTRACE_CHARBUF(link_process_name, DTRACE_TERM_BUF_SIZE);
+        dtrace_proc_str(BIF_P, process_name);
+        dtrace_pid_str(BIF_ARG_1, link_process_name);
+        DTRACE3(process_unlink, process_name, link_process_name, dtrace_ts());
+    }
+    else if(DTRACE_ENABLED(port_unlink) &&
+        (is_internal_port(BIF_ARG_1) || is_external_port(BIF_ARG_1))) {
+        DTRACE_CHARBUF(process_name, DTRACE_TERM_BUF_SIZE);
+        DTRACE_CHARBUF(link_port_name, DTRACE_TERM_BUF_SIZE);
+        dtrace_proc_str(BIF_P, process_name);
+        dtrace_portid_str(BIF_ARG_1, link_port_name);
+        DTRACE3(port_unlink, process_name, link_port_name, dtrace_ts());
+    }
+#endif
+
     if (is_internal_port(BIF_ARG_1)) {
 	erts_smp_proc_lock(BIF_P, ERTS_PROC_LOCK_LINK|ERTS_PROC_LOCK_STATUS);
 #ifdef ERTS_SMP
