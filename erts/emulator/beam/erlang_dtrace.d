@@ -364,6 +364,15 @@ provider erlang {
     probe process__getting_linked(char *p, char *p2, uint64_t ts);
 
     /**
+     * Fired when a process gets unlinked from another process.
+     *
+     * @param p the PID (string form) of the process
+     * @param p2 the PID (string form) of the process that p gets unlinked from
+     * @param ts timestamp
+     */
+    probe process__getting_unlinked(char *p, char *p2, uint64_t ts);
+
+    /**
      * Fired when a process removes the link to another process.
      *
      * @param p the PID (string form) of the process
@@ -517,6 +526,24 @@ provider erlang {
      * @param ts timestamp
      */
     probe port__unlink(char *p, char *port, uint64_t ts);
+
+    /**
+     * Fired when a port gets linked to a process.
+     *
+     * @param p the PID (string form) of the process
+     * @param port the ID of the port that gets linked to p
+     * @param ts timestamp
+     */
+    probe port__getting_linked(char *p, char *port, uint64_t ts);
+
+    /**
+     * Fired when a port gets unlinked from a process.
+     *
+     * @param p the PID (string form) of the process
+     * @param port the ID of the port that gets unlinked from p
+     * @param ts timestamp
+     */
+    probe port__getting_unlinked(char *p, char *port, uint64_t ts);
 
     /* drivers */
 

@@ -333,6 +333,17 @@ static void doit_link_net_exits_sub(ErtsLink *sublnk, void *vlnecp)
 		/* We didn't exit the process and it is traced */
 		trace_proc(NULL, rp, am_getting_unlinked, sublnk->pid);
 	    }
+#ifdef USE_VM_PROBES
+            if (xres >= 0 && DTRACE_ENABLED(process_getting_unlinked)) {
+                DTRACE_CHARBUF(process_name, DTRACE_TERM_BUF_SIZE);
+                DTRACE_CHARBUF(unlinked_process_name, DTRACE_TERM_BUF_SIZE);
+                dtrace_proc_str(rp, process_name);
+                dtrace_pid_str(sublnk->pid, unlinked_process_name);
+                DTRACE3(process_getting_unlinked, process_name,
+                        unlinked_process_name, dtrace_ts());
+        }
+#endif
+
 	}
 	erts_smp_proc_unlock(rp, rp_locks);
     }
@@ -1244,7 +1255,8 @@ int erts_net_message(Port *prt,
             DTRACE_CHARBUF(linked_process_name, DTRACE_TERM_BUF_SIZE);
             dtrace_proc_str(rp, process_name);
             dtrace_pid_str(from, linked_process_name);
-            DTRACE3(process_getting_linked, process_name, linked_process_name, dtrace_ts());
+            DTRACE3(process_getting_linked, process_name, linked_process_name, 
+                    dtrace_ts());
         }
 #endif
 
@@ -1273,6 +1285,16 @@ int erts_net_message(Port *prt,
 	if (IS_TRACED_FL(rp, F_TRACE_PROCS) && lnk != NULL) {
 	    trace_proc(NULL, rp, am_getting_unlinked, from);
 	}
+#ifdef USE_VM_PROBES
+        if (DTRACE_ENABLED(process_getting_unlinked) && lnk != NULL) {
+            DTRACE_CHARBUF(process_name, DTRACE_TERM_BUF_SIZE);
+            DTRACE_CHARBUF(unlinked_process_name, DTRACE_TERM_BUF_SIZE);
+            dtrace_proc_str(rp, process_name);
+            dtrace_pid_str(from, unlinked_process_name);
+            DTRACE3(process_getting_unlinked, process_name,
+                    unlinked_process_name, dtrace_ts());
+        }
+#endif
 
 	erts_smp_proc_unlock(rp, ERTS_PROC_LOCK_LINK);
 
@@ -1601,6 +1623,17 @@ int erts_net_message(Port *prt,
 		    /* We didn't exit the process and it is traced */
 		    trace_proc(NULL, rp, am_getting_unlinked, from);
 		}
+#ifdef USE_VM_PROBES
+                if (xres >= 0 && DTRACE_ENABLED(process_getting_unlinked)) {
+                    DTRACE_CHARBUF(process_name, DTRACE_TERM_BUF_SIZE);
+                    DTRACE_CHARBUF(unlinked_process_name, DTRACE_TERM_BUF_SIZE);
+                    dtrace_proc_str(rp, process_name);
+                    dtrace_pid_str(from, unlinked_process_name);
+                    DTRACE3(process_getting_unlinked, process_name,
+                            unlinked_process_name, dtrace_ts());
+        }
+#endif
+
 	    }
 	    erts_smp_proc_unlock(rp, rp_locks);
 	}
