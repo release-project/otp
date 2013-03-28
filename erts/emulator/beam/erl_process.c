@@ -7708,6 +7708,15 @@ erl_create_process(Process* parent, /* Parent of process (default group leader).
 	if (IS_TRACED_FL(parent, F_TRACE_PROCS)) {
 	    trace_proc(parent, parent, am_link, p->common.id);
 	}
+#ifdef USE_VM_PROBES
+    if (DTRACE_ENABLED(process_link)) {
+        DTRACE_CHARBUF(process_name, DTRACE_TERM_BUF_SIZE);
+        DTRACE_CHARBUF(link_process_name, DTRACE_TERM_BUF_SIZE);
+        dtrace_proc_str(parent, process_name);
+        dtrace_proc_str(p, link_process_name);
+        DTRACE3(process_link, process_name, link_process_name, dtrace_ts());
+    }
+#endif
 
 #ifdef DEBUG
 	ret = erts_add_link(&ERTS_P_LINKS(parent),  LINK_PID, p->common.id);

@@ -40,6 +40,7 @@
 #define ERTS_PTAB_WANT_BIF_IMPL__
 #include "erl_ptab.h"
 #include "erl_bits.h"
+#include "dtrace-wrapper.h"
 
 static Export* flush_monitor_message_trap = NULL;
 static Export* set_cpu_topology_trap = NULL;
@@ -147,6 +148,25 @@ BIF_RETTYPE link_1(BIF_ALIST_1)
     if (IS_TRACED_FL(BIF_P, F_TRACE_PROCS)) {
 	trace_proc(BIF_P, BIF_P, am_link, BIF_ARG_1);
     }
+#ifdef USE_VM_PROBES
+    if (DTRACE_ENABLED(process_link) && 
+        (is_internal_pid(BIF_ARG_1) || is_external_pid(BIF_ARG_1))) {
+        DTRACE_CHARBUF(process_name, DTRACE_TERM_BUF_SIZE);
+        DTRACE_CHARBUF(link_process_name, DTRACE_TERM_BUF_SIZE);
+        dtrace_proc_str(BIF_P, process_name);
+        dtrace_pid_str(BIF_ARG_1, link_process_name);
+        DTRACE3(process_link, process_name, link_process_name, dtrace_ts());
+    }
+    else if(DTRACE_ENABLED(port_link) && 
+        (is_internal_port(BIF_ARG_1) || is_external_port(BIF_ARG_1))) {
+        DTRACE_CHARBUF(process_name, DTRACE_TERM_BUF_SIZE);
+        DTRACE_CHARBUF(link_port_name, DTRACE_TERM_BUF_SIZE);
+        dtrace_proc_str(BIF_P, process_name);
+        dtrace_portid_str(BIF_ARG_1, link_port_name);
+        DTRACE3(port_link, process_name, link_port_name, dtrace_ts());
+    }
+#endif
+
     /* check that the pid or port which is our argument is OK */
 
     if (is_internal_pid(BIF_ARG_1)) {

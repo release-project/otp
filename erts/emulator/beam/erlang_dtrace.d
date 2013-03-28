@@ -345,6 +345,15 @@ provider erlang {
      */
     probe process__heap_shrink(char *p, int old_size, int new_size);
 
+    /**
+     * Fired when a process links to another process.
+     *
+     * @param p the PID (string form) of the process
+     * @param p2 the PID (string form) of the process that p links to
+     * @param ts timestamp
+     */ 
+    probe process__link(char *p, char *p2, uint64_t ts);
+
     /* network distribution */
 
     /**
@@ -472,6 +481,15 @@ provider erlang {
      * @param port the port ID of the not busy port
      */
     probe port__not_busy(char *port);
+
+    /**
+     * Fired when a process links to a port.
+     *
+     * @param p the PID (string form) of the process
+     * @param port the ID of the port that p links to
+     * @param ts timestamp
+     */
+    probe port__link(char *p, char *port, uint64_t ts);
 
     /* drivers */
 
