@@ -1254,6 +1254,14 @@ dtrace_pid_str(Eterm pid, char *process_buf)
 }
 
 ERTS_GLB_INLINE void
+dtrace_portid_str(Eterm portid, char *port_buf)
+{
+    erts_snprintf(port_buf, DTRACE_TERM_BUF_SIZE, "#Port<%lu.%lu>",
+                  port_channel_no(portid),
+                  port_number(portid));
+}
+
+ERTS_GLB_INLINE void
 dtrace_proc_str(Process *process, char *process_buf)
 {
     dtrace_pid_str(process->common.id, process_buf);
@@ -1262,9 +1270,7 @@ dtrace_proc_str(Process *process, char *process_buf)
 ERTS_GLB_INLINE void
 dtrace_port_str(Port *port, char *port_buf)
 {
-    erts_snprintf(port_buf, DTRACE_TERM_BUF_SIZE, "#Port<%lu.%lu>",
-                  port_channel_no(port->common.id),
-                  port_number(port->common.id));
+    dtrace_portid_str(port->common.id, port_buf);
 }
 
 ERTS_GLB_INLINE void
