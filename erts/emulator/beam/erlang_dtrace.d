@@ -390,6 +390,15 @@ provider erlang {
      */
     probe process__registered(char *p, char *name, uint64_t ts);
 
+    /**
+     * Fired when a process is unregistered.
+     *
+     * @param p the PID (string form) of the unregistered process
+     * @param name the name that was associated with the process
+     * @param ts timestamp
+     */
+    probe process__unregistered(char *p, char *name, uint64_t ts);
+
     /* network distribution */
 
     /**
@@ -562,6 +571,15 @@ provider erlang {
      * @param ts timestamp
      */
     probe port__registered(char *p, char *name, uint64_t ts);
+
+    /**
+     * Fired when a port is unregistered.
+     *
+     * @param p the port ID of the registered port
+     * @param name the name that was associated with the port
+     * @param ts timestamp
+     */
+    probe port__unregistered(char *p, char *name, uint64_t ts);
 
     /* drivers */
 

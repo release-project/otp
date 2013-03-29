@@ -552,6 +552,15 @@ int erts_unregister_name(Process *c_p,
 	    if (IS_TRACED_FL(port, F_TRACE_PORTS)) {
 		trace_port(port, am_unregister, r.name);
 	    }
+#ifdef USE_VM_PROBES
+            if (DTRACE_ENABLED(port_unregistered)) {
+                DTRACE_CHARBUF(portid, DTRACE_TERM_BUF_SIZE);
+                DTRACE_CHARBUF(rname, DTRACE_TERM_BUF_SIZE);
+                dtrace_port_str(port, portid);
+                erts_snprintf(rname, DTRACE_TERM_BUF_SIZE - 1, "%T", r.name);
+                DTRACE3(port_unregistered, portid, rname, dtrace_ts());
+            }
+#endif
 
 	} else if (rp->p) {
 
@@ -568,6 +577,15 @@ int erts_unregister_name(Process *c_p,
 	    if (IS_TRACED_FL(rp->p, F_TRACE_PROCS)) {
 		trace_proc(c_p, rp->p, am_unregister, r.name);
 	    }
+#ifdef USE_VM_PROBES
+            if (DTRACE_ENABLED(process_unregistered)) {
+                DTRACE_CHARBUF(pid, DTRACE_TERM_BUF_SIZE);
+                DTRACE_CHARBUF(rname, DTRACE_TERM_BUF_SIZE);
+                dtrace_proc_str(rp->p, pid);
+                erts_snprintf(rname, DTRACE_TERM_BUF_SIZE - 1, "%T", r.name);
+                DTRACE3(process_unregistered, pid, rname, dtrace_ts());
+            }
+#endif
 #ifdef ERTS_SMP
 	    if (rp->p != c_p) {
 		erts_smp_proc_unlock(rp->p, ERTS_PROC_LOCK_MAIN);
