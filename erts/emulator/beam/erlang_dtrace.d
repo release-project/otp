@@ -299,8 +299,9 @@ provider erlang {
      *
      * @param p the PID (string form) of the newly scheduled process
      * @param mfa the m:f/a of the function it should run next
+     * @param ts timestamp
      */
-    probe process__scheduled(char *p, char *mfa);
+    probe process__scheduled(char *p, char *mfa, uint64_t ts);
 
     /**
      * Fired when a process is unscheduled.

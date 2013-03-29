@@ -1296,7 +1296,7 @@ void process_main(void)
                 }
             }
 
-            DTRACE2(process_scheduled, process_buf, fun_buf);
+            DTRACE3(process_scheduled, process_buf, fun_buf, dtrace_ts());
         }
 #endif
 	Goto(next);
