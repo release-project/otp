@@ -6777,9 +6777,21 @@ Process *schedule(Process *p, int calls)
 #ifdef USE_VM_PROBES
     if (p != NULL && DTRACE_ENABLED(process_unscheduled)) {
         DTRACE_CHARBUF(process_buf, DTRACE_TERM_BUF_SIZE);
-
+        DTRACE_CHARBUF(fun_buf, DTRACE_TERM_BUF_SIZE);
         dtrace_proc_str(p, process_buf);
-        DTRACE1(process_unscheduled, process_buf);
+        if (ERTS_PROC_IS_EXITING(p)) {
+            strcpy(fun_buf, "<exiting>");
+        } else {
+            BeamInstr *fptr = find_function_from_pc(p->i);
+            if (fptr) {
+                dtrace_fun_decode(p, (Eterm)fptr[0],
+                                  (Eterm)fptr[1], (Uint)fptr[2],
+                                  NULL, fun_buf);
+            } else {
+                erts_snprintf(fun_buf, sizeof(fun_buf), "0");
+            }
+        }
+        DTRACE3(process_unscheduled, process_buf, fun_buf, dtrace_ts());
     }
 #endif
 

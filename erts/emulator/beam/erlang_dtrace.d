@@ -307,9 +307,11 @@ provider erlang {
      * Fired when a process is unscheduled.
      *
      * @param p the PID (string form) of the process that has been
-     * unscheduled.
+     * unscheduled
+     * @param mfa the m:f/a of the function that was running
+     * @param ts timestamp
      */
-    probe process__unscheduled(char *p);
+    probe process__unscheduled(char *p, char *mfa, uint64_t ts);
 
     /**
      * Fired when a process goes into hibernation.

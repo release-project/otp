@@ -1291,11 +1291,9 @@ void process_main(void)
                                       (Eterm)fptr[1], (Uint)fptr[2],
                                       NULL, fun_buf);
                 } else {
-                    erts_snprintf(fun_buf, sizeof(fun_buf),
-                                  "<unknown/%p>", next);
+                    erts_snprintf(fun_buf, sizeof(fun_buf), "0");
                 }
             }
-
             DTRACE3(process_scheduled, process_buf, fun_buf, dtrace_ts());
         }
 #endif
