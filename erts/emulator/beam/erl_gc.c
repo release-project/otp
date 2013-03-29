@@ -433,13 +433,21 @@ erts_garbage_collect(Process* p, int need, Eterm* objv, int nobj)
      */
     while (!done) {
 	if ((FLAGS(p) & F_NEED_FULLSWEEP) != 0) {
-	    DTRACE2(gc_major_start, pidbuf, need);
+#ifdef USE_VM_PROBES
+	    DTRACE3(gc_major_start, pidbuf, need, dtrace_ts());
+#endif
 	    done = major_collection(p, need, objv, nobj, &reclaimed_now);
-	    DTRACE2(gc_major_end, pidbuf, reclaimed_now);
+#ifdef USE_VM_PROBES
+	    DTRACE3(gc_major_end, pidbuf, reclaimed_now, dtrace_ts());
+#endif
 	} else {
-	    DTRACE2(gc_minor_start, pidbuf, need);
+#ifdef USE_VM_PROBES
+	    DTRACE3(gc_minor_start, pidbuf, need, dtrace_ts());
+#endif
 	    done = minor_collection(p, need, objv, nobj, &reclaimed_now);
-	    DTRACE2(gc_minor_end, pidbuf, reclaimed_now);
+#ifdef USE_VM_PROBES
+	    DTRACE3(gc_minor_end, pidbuf, reclaimed_now, dtrace_ts());
+#endif
 	}
     }
     reset_active_writer(p);

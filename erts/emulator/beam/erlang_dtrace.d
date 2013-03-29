@@ -224,32 +224,36 @@ provider erlang {
      *
      * @param p the PID (string form) of the exiting process
      * @param need the number of words needed on the heap
+     * @param ts timestamp
      */
-    probe gc_major__start(char *p, int need);
+    probe gc_major__start(char *p, int need, uint64_t ts);
 
     /**
      * Fired when a minor GC is starting.
      *
      * @param p the PID (string form) of the exiting process
      * @param need the number of words needed on the heap
+     * @param ts timestamp
      */
-    probe gc_minor__start(char *p, int need);
+    probe gc_minor__start(char *p, int need, uint64_t ts);
 
     /**
      * Fired when a major GC is starting.
      *
      * @param p the PID (string form) of the exiting process
      * @param reclaimed the amount of space reclaimed
+     * @param ts timestamp
      */
-    probe gc_major__end(char *p, int reclaimed);
+    probe gc_major__end(char *p, int reclaimed, uint64_t ts);
 
     /**
      * Fired when a minor GC is starting.
      *
      * @param p the PID (string form) of the exiting process
      * @param reclaimed the amount of space reclaimed
+     * @param ts timestamp
      */
-    probe gc_minor__end(char *p, int reclaimed);
+    probe gc_minor__end(char *p, int reclaimed, uint64_t ts);
 
     /**
      * Fired when a process is spawned.
