@@ -50,7 +50,7 @@ stop(_State) ->
 %%-------------------------------------------------------------------
 config_change(Changed, New, Removed) ->
     do_distribution_change(Changed, New, Removed),
-    do_global_groups_change(Changed, New, Removed),
+    do_s_groups_change(Changed, New, Removed),
     ok.
 
 get_error_logger_type() ->
@@ -124,8 +124,8 @@ init([]) ->
 		   permanent, 2000, worker, [rpc]},
 	    Global = {global_name_server, {global, start_link, []}, 
 		      permanent, 2000, worker, [global]},
-	    Glo_grp = {global_group, {global_group,start_link,[]},
-		       permanent, 2000, worker, [global_group]},
+	    SGrp = {s_group, {s_group,start_link,[]},
+		    permanent, 2000, worker, [s_group]},
 	    InetDb = {inet_db, {inet_db, start_link, []},
 		      permanent, 2000, worker, [inet_db]},
 	    NetSup = {net_sup, {erl_distribution, start_link, []}, 
@@ -140,7 +140,7 @@ init([]) ->
 			      permanent, infinity, supervisor, [?MODULE]},
 	    {ok, {SupFlags,
 		  [Rpc, Global, InetDb | DistAC] ++ 
-		  [NetSup, Glo_grp, File, Code, 
+		  [NetSup, SGrp, File, Code,
 		   StdError, User, Config, SafeSupervisor] ++ Timer}}
     end;
 init(safe) ->
@@ -267,38 +267,38 @@ is_dist_changed(Changed, New, Removed) ->
     {C, N, R}.
 
 %%-----------------------------------------------------------------
-%% The change of the global_groups parameter is taken care of here
+%% The change of the s_group parameters is taken care of here
 %%-----------------------------------------------------------------
-do_global_groups_change(Changed, New, Removed) ->
-    %% check if the global_groups parameter is changed.
+do_s_groups_change(Changed, New, Removed) ->
+    %% check if the s_groups parameter is changed.
     case is_gg_changed(Changed, New, Removed) of
 	%%{changed, new, removed}
 	{false, false, false} ->
 	    ok;
 	{C, false, false} ->
 	    %% At last, update the parameter.
-	    global_group:global_groups_changed(C);
+	    s_group:s_groups_changed(C);
 	{false, N, false} ->
-	    global_group:global_groups_added(N);
+	    s_group:s_groups_added(N);
 	{false, false, R} ->
-	    global_group:global_groups_removed(R)
+	    s_group:s_groups_removed(R)
     end.
 
 %%-----------------------------------------------------------------
-%% Check if global_groups is changed in someway.
+%% Check if s_groups are changed in someway.
 %%-----------------------------------------------------------------
 is_gg_changed(Changed, New, Removed) ->
-    C = case lists:keyfind(global_groups, 1, Changed) of
+    C = case lists:keyfind(s_groups, 1, Changed) of
 	    false ->
 		false;
-	    {global_groups, NewDistC} ->
+	    {s_groups, NewDistC} ->
 		NewDistC
 	end,
-    N = case lists:keyfind(global_groups, 1, New) of
+    N = case lists:keyfind(s_groups, 1, New) of
 	    false ->
 		false;
-	    {global_groups, NewDistN} ->
+	    {s_groups, NewDistN} ->
 		NewDistN
 	end,
-    R = lists:member(global_groups, Removed),
+    R = lists:member(s_groups, Removed),
     {C, N, R}.

@@ -1,7 +1,7 @@
 %%
 %% %CopyrightBegin%
 %%
-%% Copyright Ericsson AB 1996-2013. All Rights Reserved.
+%% Copyright Ericsson AB 1996-2011. All Rights Reserved.
 %%
 %% The contents of this file are subject to the Erlang Public License,
 %% Version 1.1, (the "License"); you may not use this file except in
@@ -140,18 +140,7 @@
 %% the connection setup.
 -define(SETUPTIME, 7000).
 
--include("net_address.hrl").
-
-%%% BIF
-
--export([dflag_unicode_io/1]).
-
--spec dflag_unicode_io(pid()) -> boolean().
-
-dflag_unicode_io(_) ->
-    erlang:nif_error(undef).
-
-%%% End of BIF
+-include("../include/net_address.hrl").
 
 %% Interface functions
 
@@ -491,7 +480,7 @@ handle_call({publish_on_node, Node}, From, State) ->
     NewState = case State#state.publish_on_nodes of
 		   undefined ->
 		       State#state{publish_on_nodes =
-				   global_group:publish_on_nodes()};
+				   s_group:publish_on_nodes()};
 		   _ ->
 		       State
 	       end,
@@ -1340,20 +1329,20 @@ start_protos(Name, [Proto | Ps], Node, Ls) ->
 		    start_protos(Name, Ps, Node, Ls)
 	    end;
 	{'EXIT', {undef,_}} ->
-	    error_logger:info_msg("Protocol: ~tp: not supported~n", [Proto]),
+	    error_logger:info_msg("Protocol: ~p: not supported~n", [Proto]),
 	    start_protos(Name,Ps, Node, Ls);
 	{'EXIT', Reason} ->
-	    error_logger:info_msg("Protocol: ~tp: register error: ~tp~n",
+	    error_logger:info_msg("Protocol: ~p: register error: ~p~n",
 				  [Proto, Reason]),
 	    start_protos(Name,Ps, Node, Ls);
 	{error, duplicate_name} ->
-	    error_logger:info_msg("Protocol: ~tp: the name " ++
+	    error_logger:info_msg("Protocol: ~p: the name " ++
 				  atom_to_list(Node) ++
 				  " seems to be in use by another Erlang node",
 				  [Proto]),
 	    start_protos(Name,Ps, Node, Ls);
 	{error, Reason} ->
-	    error_logger:info_msg("Protocol: ~tp: register/listen error: ~tp~n",
+	    error_logger:info_msg("Protocol: ~p: register/listen error: ~p~n",
 				  [Proto, Reason]),
 	    start_protos(Name,Ps, Node, Ls)
     end;
@@ -1577,6 +1566,6 @@ async_gen_server_reply(From, Msg) ->
 	    ok;
         noconnect ->
             ok; % The gen module takes care of this case.
-        {'EXIT', _} ->
-            ok
+        {'EXIT', _}=EXIT ->
+            EXIT
     end.
