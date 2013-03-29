@@ -2641,14 +2641,14 @@ port_link_failure(Eterm port_id, Eterm linker)
 	    }
 #ifdef USE_VM_PROBES
             if (xres >= 0 && DTRACE_ENABLED(port_getting_unlinked)) {
-                        DTRACE_CHARBUF(process_name, DTRACE_TERM_BUF_SIZE);
-                        DTRACE_CHARBUF(unlinked_port_name,
-                                       DTRACE_TERM_BUF_SIZE);
-                        dtrace_proc_str(rp, process_name);
-                        dtrace_portid_str(port_id, unlinked_port_name);
-                        DTRACE3(port_getting_unlinked, process_name,
-                                unlinked_port_name, dtrace_ts());
-                    }
+                DTRACE_CHARBUF(process_name, DTRACE_TERM_BUF_SIZE);
+                DTRACE_CHARBUF(unlinked_port_name,
+                               DTRACE_TERM_BUF_SIZE);
+                dtrace_proc_str(rp, process_name);
+                dtrace_portid_str(port_id, unlinked_port_name);
+                DTRACE3(port_getting_unlinked, process_name,
+                        unlinked_port_name, dtrace_ts());
+            }
 #endif
 	    if (rp_locks)
 		erts_smp_proc_unlock(rp, rp_locks);

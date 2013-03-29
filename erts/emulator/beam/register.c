@@ -224,12 +224,30 @@ int erts_register_name(Process *c_p, Eterm name, Eterm id)
 	if (IS_TRACED_FL(proc, F_TRACE_PROCS)) {
 	    trace_proc(c_p, proc, am_register, name);
 	}
+#ifdef USE_VM_PROBES
+        if (DTRACE_ENABLED(process_registered)) {
+            DTRACE_CHARBUF(pid, DTRACE_TERM_BUF_SIZE);
+            DTRACE_CHARBUF(rname, DTRACE_TERM_BUF_SIZE);
+            dtrace_proc_str(proc, pid);
+            erts_snprintf(rname, DTRACE_TERM_BUF_SIZE - 1, "%T", name);
+            DTRACE3(process_registered, pid, rname, dtrace_ts());
+        }
+#endif
 	proc->common.u.alive.reg = rp;
     }
     else if (port && rp->pt == port) {
     	if (IS_TRACED_FL(port, F_TRACE_PORTS)) {
 		trace_port(port, am_register, name);
 	}
+#ifdef USE_VM_PROBES
+        if (DTRACE_ENABLED(port_registered)) {
+            DTRACE_CHARBUF(portid, DTRACE_TERM_BUF_SIZE);
+            DTRACE_CHARBUF(rname, DTRACE_TERM_BUF_SIZE);
+            dtrace_port_str(port, portid);
+            erts_snprintf(rname, DTRACE_TERM_BUF_SIZE - 1, "%T", name);
+            DTRACE3(port_registered, portid, rname, dtrace_ts());
+        }
+#endif
 	port->common.u.alive.reg = rp;
     }
 

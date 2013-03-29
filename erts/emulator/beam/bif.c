@@ -1147,7 +1147,7 @@ BIF_RETTYPE unlink_1(BIF_ALIST_1)
             DTRACE_CHARBUF(process_name, DTRACE_TERM_BUF_SIZE);
             DTRACE_CHARBUF(unlinked_process_name, DTRACE_TERM_BUF_SIZE);
             dtrace_proc_str(rp, process_name);
-            dtrace_proc_str(BIF_P, unlinked_process_name);
+            dtrace_pid_str(BIF_P->common.id, unlinked_process_name);
             DTRACE3(process_getting_unlinked, process_name, 
                     unlinked_process_name, dtrace_ts());
         }

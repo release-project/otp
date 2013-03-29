@@ -8719,7 +8719,7 @@ static void doit_exit_link(ErtsLink *lnk, void *vpcontext)
                         DTRACE_CHARBUF(unlinked_process_name, 
                                        DTRACE_TERM_BUF_SIZE);
                         dtrace_proc_str(rp, process_name);
-                        dtrace_pid_str(p, unlinked_process_name);
+                        dtrace_pid_str(p->common.id, unlinked_process_name);
                         DTRACE3(process_getting_unlinked, process_name,
                                 unlinked_process_name, dtrace_ts());
                     }

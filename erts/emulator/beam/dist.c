@@ -341,7 +341,7 @@ static void doit_link_net_exits_sub(ErtsLink *sublnk, void *vlnecp)
                 dtrace_pid_str(sublnk->pid, unlinked_process_name);
                 DTRACE3(process_getting_unlinked, process_name,
                         unlinked_process_name, dtrace_ts());
-        }
+            }
 #endif
 
 	}

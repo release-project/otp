@@ -381,6 +381,15 @@ provider erlang {
      */
     probe process__unlink(char *p, char *p2, uint64_t ts);
 
+    /**
+     * Fired when a process is registered with a name.
+     *
+     * @param p the PID (string form) of the registered process
+     * @param name the name that is associated with the process
+     * @param ts timestamp
+     */
+    probe process__registered(char *p, char *name, uint64_t ts);
+
     /* network distribution */
 
     /**
@@ -544,6 +553,15 @@ provider erlang {
      * @param ts timestamp
      */
     probe port__getting_unlinked(char *p, char *port, uint64_t ts);
+
+    /**
+     * Fired when a port is registered with a name.
+     *
+     * @param p the port ID of the registered port
+     * @param name the name that is associated with the port
+     * @param ts timestamp
+     */
+    probe port__registered(char *p, char *name, uint64_t ts);
 
     /* drivers */
 
