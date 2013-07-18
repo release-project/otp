@@ -18,7 +18,7 @@
 %%
 -module(global_search).
 
-%% Search for globally registered names in the s_groups.
+%% Search for globally registered names in the global groups.
 %% This is a help module to the s_group.erl
 
 
@@ -194,7 +194,7 @@ whereis_any_loop([{_Group_name, Nodes}|T], {Name, SGroupName}) ->
     end.
 
 %%%====================================================================================
-%%% Search for the globally registered name in a specified s_group.
+%%% Search for the globally registered name in a specified global group.
 %%%====================================================================================
 whereis_group_loop([], {_Name, _SGroupName}) ->
     group_down;
@@ -228,7 +228,7 @@ whereis_check_node(Node, {Name, SGroupName}) ->
 
 
 %%%====================================================================================
-%%% Search for all globally registered name in a specified s_group.
+%%% Search for all globally registered name in a specified global group.
 %%%====================================================================================
 names_group_loop([]) ->
     group_down;

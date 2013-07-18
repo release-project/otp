@@ -1,4 +1,4 @@
-
+%%
 %% %CopyrightBegin%
 %%
 %% Copyright Ericsson AB 1996-2013. All Rights Reserved.
@@ -22,8 +22,7 @@
 %% Global provides global registration of process names. The names are
 %% dynamically kept up to date with the entire network. Global can
 %% operate in two modes: in a fully connected network, or in a
-%% non-fully connected network. In the latter case, the name
-%% registration mechanism won't work. 
+%% non-fully connected network.
 %% As a separate service Global also provides global locks.
 
 %% External exports
@@ -34,21 +33,20 @@
 	 unregister_name_external/1,
 	 re_register_name/2, re_register_name/3, re_register_name/4,
 	 send/2,
-	 whereis_name/1,
-	 registered_names/0,
-
-	 %NC Did not test
+	 whereis_name/1, whereis_name/2,
+	 registered_names/0, registered_names/1,
+	 own_s_groups/0, get_known/0,	 
 	 sync/0, sync/1]).
 
--export([set_s_group_name/1, reset_s_group_name/0, reset_global_state/0,
-	 add_s_group/1, delete_s_group/1,
-	 remove_s_group_nodes/2]).
+-export([unregister_foreign_names/0,
+	 add_attribute/1, remove_attribute/1, registered_attributes/0]).
 
 -export([set_lock/1, set_lock/2, set_lock/3, del_lock/1, del_lock/2,
 	 trans/2, trans/3, trans/4,
 	 random_exit_name/3, random_notify_name/3,
 	 notify_all_name/3,
-	 node_disconnected/1]).
+	 node_disconnected/1, node_connected/1,
+	 get_known_s_group/1]).
 
 %% Internal exports
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
@@ -56,11 +54,11 @@
 
 -export([info/0]).
 
--compile(export_all).
+%-compile(export_all).
 
 -include_lib("stdlib/include/ms_transform.hrl").
 
-%% Set this variable to 'allow' to allow several names of a process.
+%% Set this variable to 'allow' several names of a process.
 %% This is for backward compatibility only; the functionality is broken.
 -define(WARN_DUPLICATED_NAME, global_multi_name_action).
 
@@ -98,48 +96,57 @@
 
 -define(vsn, 5).
 
-
 -define(debug(_), ok). 
 
-%%-define(debug(Term), erlang:display(Term)).
+%-define(debug(Term), erlang:display(Term)).
 
 
 %%-----------------------------------------------------------------
-%% connect_all = boolean() - true if we are supposed to set up a
-%%                           fully connected net
-%% known       = [Node] - all nodes known to us
-%% synced      = [Node] - all nodes that have the same names as us
-%% resolvers   = [{Node, MyTag, Resolver}] - 
-%%                        the tag separating different synch sessions, 
-%%                        and the pid of the name resolver process
+%% connect_all  = boolean() - true if we are supposed to set up a
+%%                            fully connected net
+%% own_s_groups = [{SGroupName, [Node]}] - all own s_groups and
+%%   		  			   their nodes
+%% known        = [{SGroupName, [Node]}] - all s\_groups and nodes
+%%   		  			   known to us
+%% synced       = [{SGroupName, [Node]}] - all nodes that have the
+%%   		  	      		   same names as us
+%% resolvers    = [{Node, MyTag, Resolver}] - the tag separating
+%% 		  	  	 	      different synch
+%%					      sessions, and the pid
+%%					      of the name resolver
+%%					      process
 %% syncers     = [pid()] - all current syncers processes
-%% node_name   = atom()  - our node name (can change if distribution
-%%                         is started/stopped dynamically)
+%% node_name   = atom() - our node name (can change if distribution
+%%                        is started/stopped dynamically)
 %%
 %% In addition to these, we keep info about messages arrived in
 %% the process dictionary:
-%% {pre_connect, Node} = {Vsn, InitMsg} - init_connect msgs that
+%% {pre_connect, Node}  = {Vsn, InitMsg} - init_connect msgs that
 %%                         arrived before nodeup
-%% {wait_lock, Node}   = {exchange, NameList, _NamelistExt} | lock_is_set
+%% {wait_lock, Node}    = {exchange, NameList, _NamelistExt} |
+%%   	       		  lock_is_set
 %%                        - see comment below (handle_cast)
-%% {save_ops, Node}    = {resolved, HisKnown, NamesExt, Res} | [operation()] 
-%%                        - save the ops between exchange and resolved
-%% {prot_vsn, Node}    = Vsn - the exchange protocol version (not used now)
-%% {sync_tag_my, Node} =  My tag, used at synchronization with Node
+%% {save_ops, Node}     = {resolved, HisKnown, NamesExt, Res} |
+%%   	      		  [operation()] 
+%%                       - save the ops between exchange and resolved
+%% {prot_vsn, Node}     = Vsn - the exchange protocol version
+%% 	      		        (not used now)
+%% {sync_tag_my, Node}  =  My tag, used at synchronization with Node
 %% {sync_tag_his, Node} = The Node's tag, used at synchronization
-%% {lock_id, Node} = The resource locking the partitions
+%% {lock_id, Node}      = The resource locking the partitions
 %%-----------------------------------------------------------------
 -type group_name()  :: atom().
 -type group_tuple() :: {GroupName :: group_name(), [node()]}.
                  
--record(state, {connect_all        :: boolean(),
-		known = []         :: [group_tuple()],	%% group_name()?
-		synced = []        :: [group_tuple()],	%% group_name()?
-		resolvers = [], 
-		syncers = []       :: [pid()],
-		node_name = node() :: node(),
-		s_group = no_group :: group_name(),  %% should we call it modif_s_group?
-		%own_s_group_names = [] :: [group_name()],
+-record(state, {connect_all	      :: boolean(),
+		own_s_groups = []     :: [group_tuple()],
+		known = []            :: [group_tuple()],
+		synced = []           :: [group_tuple()],
+		resolvers = [],
+		syncers = []	      :: [pid()],
+		node_name = node()    :: node(),
+		s_group = no_group    :: group_name(),
+		attributes = [],
 		the_locker,
 		the_registrar,
 		trace,
@@ -151,20 +158,24 @@
 %%% (the first position is the key):
 %%%
 %%% global_locks (set): {ResourceId, LockRequesterId, [{Pid,RPid,ref()]}
-%%%   Pid is locking ResourceId, ref() is the monitor ref.
+%%%   Pid is locking ResourceId,
+%%%   ref() is the monitor ref.
 %%%   RPid =/= Pid if there is an extra process calling erlang:monitor().
-%%% global_names (set):  {{Name, SGroupName}, Pid, Method, RPid, ref()}
-%%%   Registered names. ref() is the monitor ref.
+%%% global_names (set): {{SGroupName, Name}, Pid, Method, RPid, ref()}
+%%%   Registered names.
+%%%   ref() is the monitor ref.
 %%%   RPid =/= Pid if there is an extra process calling erlang:monitor().
-%%% global_names_ext (set): {{Name, SGroupName}, Pid, RegNode}
+%%% global_names_ext (set): {{SGroupName, Name}, Pid, RegNode}
 %%%   External registered names (C-nodes).
 %%%   (The RPid:s can be removed when/if erlang:monitor() returns before 
 %%%    trying to connect to the other node.)
 %%% 
 %%% Helper tables:
-%%% global_pid_names (bag): {Pid, {Name, SGroupName}} | {ref(), {Name, SGroupName}}
+%%% global_pid_names (bag): {Pid, {SGroupName, Name}} |
+%%% 		     	    {ref(), {SGroupName, Name}}
 %%%   Name(s) registered for Pid.
-%%%   There is one {Pid, {Name, SGroupName}} and one {ref(), {Name, SGroupName}} for every Pid.
+%%%   There is one {Pid, {SGroupName, Name}} and one
+%%%                {ref(), {SGroupName, Name}} for every Pid.
 %%%   ref() is the same ref() as in global_names.
 %%% global_pid_ids (bag): {Pid, ResourceId} | {ref(), ResourceId}
 %%%   Resources locked by Pid.
@@ -198,12 +209,15 @@ stop() ->
 
 -spec sync() -> 'ok' | {'error', Reason :: term()}.
 sync() ->
-    case s_group:s_groups() of
+    ?debug({"global_sync"}),
+    case application:get_env(kernel, s_groups) of
      	  undefined ->
 	      case check_sync_nodes() of
 	      	{error, _} = Error ->
+			?debug({"global_sync_Error", Error}),
 	    		Error;
 		SyncNodes ->
+		        ?debug({"global_sync_SyncNodes", SyncNodes}),
 	    		gen_server:call(global_name_server, {sync,
 			SyncNodes}, infinity)
 	      end;
@@ -215,8 +229,10 @@ sync() ->
 sync(Nodes) ->
     case check_sync_nodes(Nodes) of
 	{error, _} = Error ->
+	    ?debug({"global_sync1_Error", Error}),
 	    Error;
 	SyncNodes ->
+	    ?debug({"global_sync1_SyncNodes", SyncNodes}),
 	    gen_server:call(global_name_server, {sync, SyncNodes}, infinity)
     end.
 
@@ -225,24 +241,24 @@ sync(Nodes) ->
       Msg :: term(),
       Pid :: pid().
 send(Name, Msg) ->
-    send(Name, undefined, Msg).
+    send(undefined, Name, Msg).
 
--spec send(Name, SGroupName, Msg) -> Pid when
-      Name :: term(),
+-spec send(SGroupName, Name, Msg) -> Pid when
       SGroupName :: group_name(),
+      Name :: term(),
       Msg :: term(),
       Pid :: pid().
-send(Name, SGroupName, Msg) ->
-    case whereis_name(Name, SGroupName) of
+send(SGroupName, Name, Msg) ->
+    case whereis_name(SGroupName, Name) of
 	Pid when is_pid(Pid) ->
 	    Pid ! Msg,
 	    Pid;
-	undefined ->		 %% NC
+	undefined ->
       	    case SGroupName of
 	    	 undefined ->
 		     exit({badarg, {Name, Msg}});
 		 _ ->
-		     exit({badarg, {Name, SGroupName, Msg}})
+		     exit({badarg, {SGroupName, Name, Msg}})
 	    end
     end.
 
@@ -251,82 +267,86 @@ send(Name, SGroupName, Msg) ->
       Name :: term(),
       Pid :: pid().
 whereis_name(Name) ->
-    whereis_name(Name, undefined).
+    whereis_name(undefined, Name).
 
--spec whereis_name(Name, SGroupName) -> Pid | 'undefined' when
-      Name :: term(),
+-spec whereis_name(SGroupName, Name) -> Pid | 'undefined' when
       SGroupName :: group_name(),
+      Name :: term(),
       Pid :: pid().
-whereis_name(Name, SGroupName) ->
-    where(Name, SGroupName).
+whereis_name(SGroupName, Name) ->
+    where(SGroupName, Name).
 
 node_disconnected(Node) ->
     global_name_server ! {nodedown, Node}.
 
+node_connected(Node) ->
+    global_name_server ! {nodeup, no_group, Node}.
 %%-----------------------------------------------------------------
-%% Method = function(Name, Pid1, Pid2) -> Pid | Pid2 | none
+%% Method = function({SGroupName, Name}, Pid1, Pid2) -> Pid | Pid2 | none
 %% Method is called if a name conflict is detected when two nodes
 %% are connecting to each other. It is supposed to return one of
 %% the Pids or 'none'. If a pid is returned, that pid is
-%% registered as Name on all nodes. If 'none' is returned, the
-%% Name is unregistered on all nodes. If anything else is returned,
-%% the Name is unregistered as well.
+%% registered as {SGroupName, Name} on all nodes. If 'none' is returned,
+%% the {SGroupName, Name} is unregistered on all nodes. If anything else
+%% is returned, the {SGroupName, Name} is unregistered as well.
 %% Method is called once at one of the nodes where the processes reside
 %% only. If different Methods are used for the same name, it is
 %% undefined which one of them is used.
 %% Method blocks the name registration, but does not affect global locking.
 %%-----------------------------------------------------------------
 
--spec register_name(Name, Pid) -> 'yes' | 'no' when
+-spec register_name(Name, Pid) -> 'yes' | {no, Reason} when
       Name :: term(),
-      Pid :: pid().
-
+      Pid :: pid(),
+      Reason :: term().
 register_name(Name, Pid) when is_pid(Pid) ->
-     case s_group:s_groups() of
+     case application:get_env(kernel, s_groups) of
      	  undefined ->
-	  	register_name(Name, undefined, Pid, fun random_exit_name/3);
+	  	register_name(undefined, Name, Pid, fun random_exit_name/3);
 	  _ ->
-		no
+		{no, the_node_is_not_free}
      end.
 
 -type method() :: fun((Name :: term(), Pid :: pid(), Pid2 :: pid()) ->
                              pid() | 'none').
 
--spec register_name(Name, Pid, Resolve) -> 'yes' | 'no' when
+-spec register_name(Name, Pid, Resolve) -> 'yes' | {no, Reason} when
       Name :: term(),
       Pid :: pid(),
-      Resolve :: method().
-
+      Resolve :: method(),
+      Reason :: term().
 register_name(Name, Pid, Resolve) when is_pid(Pid) ->
-     case s_group:s_groups() of
+     case application:get_env(kernel, s_groups) of
      	  undefined ->
-	        register_name(Name, undefined, Pid, Resolve);
+	        register_name(undefined, Name, Pid, Resolve);
           _ ->
-		no
+		{no, the_node_is_not_free}
      end.
 
--spec register_name(Name, SGroupName, Pid, Resolve) -> 'yes' | 'no' when
-      Name :: term(),
+-spec register_name(SGroupName, Name, Pid, Resolve) -> 'yes'
+      				      	   	       | {no, Reason} when
       SGroupName :: group_name(),
+      Name :: term(),
       Pid :: pid(),
-      Resolve :: method() | undefined.
-
-register_name(Name, SGroupName, Pid, Method) when is_pid(Pid) ->
+      Resolve :: method() | undefined,
+      Reason :: term().
+register_name(SGroupName, Name, Pid, Method) when is_pid(Pid) ->
     Fun = fun(Nodes) ->
-        case (where(Name, SGroupName) =:= undefined) andalso check_dupname(Name, SGroupName, Pid) of
+        case (where(SGroupName, Name) =:= undefined) andalso
+	      check_dupname(SGroupName, Name, Pid) of
             true ->
                 gen_server:multi_call(Nodes,
                                       global_name_server,
-                                      {register, {Name, SGroupName}, Pid, Method}),
+                                      {register, {SGroupName, Name}, Pid, Method}),
                 yes;
             _ ->
-                no
+                {no, name_or_pid_already_registered}
         end
     end,
-    ?trace({register_name, self(), Name, SGroupName, Pid, Method}),
+    ?trace({register_name, self(), SGroupName, Name, Pid, Method}),
     gen_server:call(global_name_server, {registrar, Fun, SGroupName}, infinity).
 
-check_dupname(Name, SGroupName, Pid) ->
+check_dupname(SGroupName, Name, Pid) ->
     case ets:lookup(global_pid_names, Pid) of
         [] ->
             true;
@@ -335,17 +355,17 @@ check_dupname(Name, SGroupName, Pid) ->
                 {ok, allow} ->
                     true;
                 _ ->
-		    NamesRegistered = [{Name1, SGroupName1} || {_Pid, {Name1, SGroupName1}} <- PidNames],
-		    case lists:keyfind(SGroupName, 2, NamesRegistered) of
+		    NamesRegistered = [{SGroupName1, Name1} || {_Pid, {SGroupName1, Name1}} <- PidNames],
+		    case lists:keyfind(SGroupName, 1, NamesRegistered) of
 		    	 false ->
 			       true;
 			 NameRegistered ->
 			       S = "global: ~w registered under several names: ~w\n",
 			       case SGroupName == undefined of
 			       	    true ->
-			       	    	 Names = [Name | [Name2 || {Name2, _SGroupName} <- [NameRegistered]]];
+			       	    	 Names = [Name | [Name2 || {_SGroupName, Name2} <- [NameRegistered]]];
 				    false ->
-			       	    	 Names = [{Name, SGroupName} | [NameRegistered]]
+			       	    	 Names = [{SGroupName, Name} | [NameRegistered]]
 			       end,
                     	       error_logger:error_msg(S, [Pid, Names]),
                     	       false
@@ -355,103 +375,94 @@ check_dupname(Name, SGroupName, Pid) ->
 
 -spec unregister_name(Name) -> _ when
       Name :: term().
-
 unregister_name(Name) ->
-      unregister_name(Name, undefined).
+      unregister_name(undefined, Name).
 
-%-spec unregister_name(Name, SGroupName) -> _ when
-%      Name :: term(),
-%      SGroupName :: group_name().
-
-unregister_name(Name, SGroupName) ->
-    case where(Name, SGroupName) of
+unregister_name(SGroupName, Name) ->
+    case where(SGroupName, Name) of
 	undefined ->
 	    ok;
 	_ ->
 	    Fun = fun(Nodes) ->
 			  gen_server:multi_call(Nodes,
 						global_name_server,
-						{unregister, Name, SGroupName}),
+						{unregister, SGroupName, Name}),
 			  ok
 		  end,
-            ?trace({unregister_name, self(), Name, SGroupName}),
+            ?trace({unregister_name, self(), SGroupName, Name}),
             gen_server:call(global_name_server, {registrar, Fun, SGroupName}, infinity)
     end.
 
--spec re_register_name(Name, Pid) -> 'yes' | 'no'  when
+-spec re_register_name(Name, Pid) -> 'yes' | {no, Reason}  when
       Name :: term(),
-      Pid :: pid().
+      Pid :: pid(),
+      Reason :: term().
 re_register_name(Name, Pid) when is_pid(Pid) ->
-     case s_group:s_groups() of
+     case application:get_env(kernel, s_groups) of
      	  undefined ->
-	  	re_register_name(Name, undefined, Pid, fun random_exit_name/3);
+	  	re_register_name(undefined, Name, Pid, fun random_exit_name/3);
 	  _ ->
-		no
+		{no, the_node_is_not_free}
      end.
 
--spec re_register_name(Name, Pid, Resolve) -> 'yes' | 'no' when
+-spec re_register_name(Name, Pid, Resolve) -> 'yes' | {no, Reason} when
       Name :: term(),
       Pid :: pid(),
-      Resolve :: method().
+      Resolve :: method(),
+      Reason :: term().
 re_register_name(Name, Pid, Method) when is_pid(Pid) ->
-     case s_group:s_groups() of
+     case application:get_env(kernel, s_groups) of
      	  undefined ->
-	  	re_register_name(Name, undefined, Pid, Method);
+	  	re_register_name(undefined, Name, Pid, Method);
 	  _ ->
-		no
+		{no, the_node_is_not_free}
      end.
 
--spec re_register_name(Name, SGroupName, Pid, Resolve) -> 'yes' | 'no' when
-      Name :: term(),
+-spec re_register_name(SGroupName, Name, Pid, Resolve) -> 'yes' | {no, Reason} when
       SGroupName :: group_name(),
+      Name :: term(),
       Pid :: pid(),
-      Resolve :: method().
-re_register_name(Name, SGroupName, Pid, Method) when is_pid(Pid) ->
+      Resolve :: method(),
+      Reason :: term().
+re_register_name(SGroupName, Name, Pid, Method) when is_pid(Pid) ->
     Fun = fun(Nodes) ->
-        case check_dupname(Name, SGroupName, Pid) of
+        case check_dupname(SGroupName, Name, Pid) of
             true ->
 		  gen_server:multi_call(Nodes,
 					global_name_server,
-					{register, {Name, SGroupName}, Pid, Method}),
+					{register, {SGroupName, Name}, Pid, Method}),
 		  yes;
 	    _ ->
-	          no
+	          {no, pid_is_already_registered}
 	end
     end,
-    ?trace({re_register_name, self(), Name, SGroupName, Pid, Method}),
+    ?trace({re_register_name, self(), SGroupName, Name, Pid, Method}),
     gen_server:call(global_name_server, {registrar, Fun, SGroupName}, infinity).
 
 -spec registered_names() -> [Name] when
       Name :: term().
-registered_names() ->		%NC
-    case s_group:s_groups() of
-	 {_, _} ->
-	     registered_names(all_names);
+registered_names() ->
+    case application:get_env(kernel, s_groups) of
     	 undefined ->
-	     registered_names(undefined)
+	     registered_names(undefined);
+	 _ ->
+	     registered_names(all_names)
     end.
 
--spec registered_names(Flag) -> [Name] when	%NC
+-spec registered_names(Flag) -> [Name] when
       Flag :: term(),
       Name :: term().
 registered_names(Flag) ->
-    MS = ets:fun2ms(fun({{Name,SGroupName},_Pid,_M,_RP,_R}) -> {Name,SGroupName} end),
+    MS = ets:fun2ms(fun({{SGroupName, Name},_Pid,_M,_RP,_R}) -> {SGroupName, Name} end),
     NamesList = ets:select(global_names, MS),
     case Flag of
     	 undefined ->
-	 	s_group_undefined_names(NamesList, []);		%NC use lists: instead
+		[Name || {SGroupName, Name} <- NamesList, SGroupName==undefined];
 	 all_names ->
 	 	NamesList;
 	 _ ->
 		[]
     end.
-
-s_group_undefined_names([], Names) ->
-    Names;
-s_group_undefined_names([{Name, SGroupName} | Tail], Names) when SGroupName =:= undefined ->
-    s_group_undefined_names(Tail, [Name | Names]);
-s_group_undefined_names([{_Name, _SGroupName} | Tail], Names) ->
-    s_group_undefined_names(Tail, Names).
 
 %%-----------------------------------------------------------------
 %% The external node (e.g. a C-node) registers the name on an Erlang
@@ -469,35 +480,36 @@ s_group_undefined_names([{_Name, _SGroupName} | Tail], Names) ->
 %% the fact that monitors do the job now.]
 %%-----------------------------------------------------------------
 register_name_external(Name, Pid) when is_pid(Pid) ->
-     case s_group:s_groups() of
+     case application:get_env(kernel, s_groups) of
      	  undefined ->
-	       register_name_external(Name, undefined, Pid, fun random_exit_name/3);
+	       register_name_external(undefined, Name, Pid, fun random_exit_name/3);
           _ ->
-		no
+	       {no, the_node_is_not_free}
      end.
 
 register_name_external(Name, Pid, Method) when is_pid(Pid) ->
-     case s_group:s_groups() of
+     case application:get_env(kernel, s_groups) of
      	  undefined ->
-	       register_name_external(Name, undefined, Pid, Method);
+	       register_name_external(undefined, Name, Pid, Method);
           _ ->
-		no
+	       {no, the_node_is_not_free}
      end.
     
 
-register_name_external(Name, SGroupName, Pid, Method) when is_pid(Pid) ->
+register_name_external(SGroupName, Name, Pid, Method) when is_pid(Pid) ->
     Fun = fun(Nodes) ->
-		  case where(Name, SGroupName) of
+		  case where(SGroupName, Name) of
 		      undefined ->
 			  gen_server:multi_call(Nodes,
 						global_name_server,
-						{register_ext, Name, SGroupName,Pid, 
+						{register_ext, SGroupName, Name, Pid, 
                                                  Method, node()}),
 			  yes;
-		      _Pid -> no
+		      _Pid ->
+		          {no, the_name_is_already_used}
 		  end
 	  end,
-    ?trace({register_name_external, self(), Name, SGroupName, Pid, Method}),
+    ?trace({register_name_external, self(), SGroupName, Name, Pid, Method}),
     gen_server:call(global_name_server, {registrar, Fun, SGroupName}, infinity).
 
 unregister_name_external(Name) ->
@@ -508,6 +520,7 @@ unregister_name_external(Name) ->
 -spec set_lock(Id) -> boolean() when
       Id :: id().
 set_lock(Id) ->
+    ?debug("set_lock/1"),
     set_lock(Id, [node() | nodes()], infinity, 1).
 
 -type retries() :: non_neg_integer() | 'infinity'.
@@ -516,6 +529,7 @@ set_lock(Id) ->
       Id :: id(),
       Nodes :: [node()].
 set_lock(Id, Nodes) ->
+    ?debug("set_lock/2"),
     set_lock(Id, Nodes, infinity, 1).
 
 -spec set_lock(Id, Nodes, Retries) -> boolean() when
@@ -530,6 +544,7 @@ set_lock(Id, Nodes, infinity) ->
 set_lock({_ResourceId, _LockRequesterId}, [], _Retries, _Times) ->
     true;
 set_lock({_ResourceId, _LockRequesterId} = Id, Nodes, Retries, Times) ->
+    ?debug("set_lock/4"),
     ?trace({set_lock,{me,self()},Id,{nodes,Nodes},
             {retries,Retries}, {times,Times}}),
     case set_lock_on_nodes(Id, Nodes) of
@@ -552,6 +567,7 @@ del_lock(Id) ->
       Id :: id(),
       Nodes :: [node()].
 del_lock({_ResourceId, _LockRequesterId} = Id, Nodes) ->
+    ?debug({"del_lock_Nodes", Nodes}),
     ?trace({del_lock, {me,self()}, Id, {nodes,Nodes}}),
     gen_server:multi_call(Nodes, global_name_server, {del_lock, Id}),
     true.
@@ -577,7 +593,6 @@ trans(Id, Fun, Nodes) -> trans(Id, Fun, Nodes, infinity).
       Nodes :: [node()],
       Retries :: retries(),
       Res :: term().
-
 trans(Id, Fun, Nodes, Retries) ->
     case set_lock(Id, Nodes, Retries) of
 	true ->
@@ -593,26 +608,38 @@ trans(Id, Fun, Nodes, Retries) ->
 info() ->
     gen_server:call(global_name_server, info, infinity).
 
-get_s_group_name() ->
-    request(get_s_group_name).
+unregister_foreign_names() ->
+    request({unregister_foreign_names}).
 
-set_s_group_name(SGroupName) ->
-    request({set_s_group_name, SGroupName}).
+%%-----------------------------------------------------------------
+%% Adding, removeing, and listing attributes
+%%-----------------------------------------------------------------
+-spec add_attribute(Args) -> {ok, Args} | {error, Reason} when
+      Args :: [term()],
+      Reason :: term().
+add_attribute(Args) ->
+    case is_list(Args) of
+        true ->
+	    request({add_attribute, Args});
+	_ ->
+	    {error, parameter_should_be_a_list}
+    end.
 
-reset_s_group_name() ->
-    request({set_s_group_name, no_group}).
+-spec remove_attribute(Args) -> {ok, Args} | {error, Reason} when
+      Args :: [term()],
+      Reason :: term().
+remove_attribute(Args) ->
+    case is_list(Args) of
+        true ->
+	    request({remove_attribute, Args});
+	_ ->
+	    {error, parameter_should_be_a_list}
+    end.
 
-reset_global_state() ->
-    request({reset_global_state}).
+registered_attributes() ->
+    request(registered_attributes).
 
-add_s_group(SGroupName) ->
-    request({add_s_group, SGroupName}).
-
-delete_s_group(SGroupName) ->
-    request({delete_s_group, SGroupName}).
-
-remove_s_group_nodes(SGroupName, NodesToRm)->
-    request({remove_s_group_nodes, SGroupName, NodesToRm}).
+%%-----------------------------------------------------------------
 
 request(Req) ->
     request(Req, infinity).
@@ -624,6 +651,7 @@ request(Req, Time) ->
 	_Other -> 
 	    {error, global_name_server_not_runnig}
     end.
+
 
 %%%-----------------------------------------------------------------
 %%% Call-back functions from gen_server
@@ -788,19 +816,20 @@ handle_call({registrar, Fun, SGroupName}, From, S) ->
 
 %% The pattern {register,'_','_','_'} is traced by the inviso
 %% application. Do not change.
-handle_call({register, {Name, SGroupName}, Pid, Method}, {FromPid, _Tag}, S0) ->
-    S = ins_name(Name, SGroupName, Pid, Method, FromPid, [], S0),
+handle_call({register, {SGroupName, Name}, Pid, Method}, {FromPid, _Tag}, S0) ->
+    S = ins_name(SGroupName, Name, Pid, Method, FromPid, [], S0),
     {reply, yes, S};
 
-handle_call({unregister, Name, SGroupName}, _From, S0) ->	%NC
-    S = delete_global_name2(Name, SGroupName, S0),
+handle_call({unregister, SGroupName, Name}, _From, S0) ->
+    S = delete_global_name2(SGroupName, Name, S0),
     {reply, ok, S};
 
-handle_call({register_ext, Name, SGroupName, Pid, Method, RegNode}, {FromPid,_Tag}, S0) ->
-    S = ins_name_ext(Name, SGroupName, Pid, Method, RegNode, FromPid, [], S0),
+handle_call({register_ext, SGroupName, Name, Pid, Method, RegNode}, {FromPid,_Tag}, S0) ->
+    S = ins_name_ext(SGroupName, Name, Pid, Method, RegNode, FromPid, [], S0),
     {reply, yes, S};
 
 handle_call({set_lock, Lock}, {Pid, _Tag}, S0) ->
+    ?debug("set_lock1"),
     {Reply, S} = handle_set_lock(Lock, Pid, S0),
     {reply, Reply, S};
 
@@ -821,13 +850,15 @@ handle_call({get_known_s_group, SGroupName}, _From, S) ->
     ?debug({get_known_s_group_Reply, Reply}),
     {reply, Reply, S};
 
+handle_call(own_s_groups, _From, S) ->
+    {reply, S#state.own_s_groups, S};
+
 handle_call(get_synced, _From, S) ->
     {reply, S#state.synced, S};
 
 handle_call({sync, Nodes}, From, S) ->
-    %% If we have several global groups, this won't work, since we will
-    %% do start_sync on a nonempty list of nodes even if the system
-    %% is quiet.
+    %% This will not work on an s_group node, since we will do start_sync
+    %% on a nonempty list of nodes even if the system is quiet.
     Pid = start_sync(lists:delete(node(), Nodes) -- S#state.synced, From),
     {noreply, S#state{syncers = [Pid | S#state.syncers]}};
 
@@ -856,68 +887,20 @@ handle_call(high_level_trace_get, _From, #state{trace = Trace}=S) ->
 handle_call(stop, _From, S) ->
     {stop, normal, stopped, S};
 
-handle_call({set_s_group_name, SGroupName}, _From, S) ->
-    {reply, ok, S#state{s_group = SGroupName}};
-
-handle_call({reset_global_state}, _From, S) ->	%% NC Added
-    NewS = S#state{known=[],
-                   synced=[]
-                  },
+handle_call({unregister_foreign_names}, _From, S) ->
+    NewS = unregister_foreign_names(S),
     {reply, ok, NewS};
 
-handle_call(get_s_group_name, _From, S) ->
-    {reply, S#state.s_group, S};
+handle_call({add_attribute, Args}, _From, S) ->
+    NewArgs = lists:usort(S#state.attributes++Args),
+    {reply, ok, S#state{attributes = NewArgs}};
 
-handle_call({add_s_group, SGroupName}, _From, S) ->
-    NewS = S#state{known=[{G, Ns}||{G, Ns} <- S#state.known, G/=SGroupName],
-                   synced=[{G, Ns}||{G, Ns} <- S#state.synced, G/=SGroupName]
-                  },
-    NewS1 = NewS#state{known=[{SGroupName, []} | S#state.known],
-                       synced=[{SGroupName, []} | S#state.synced]
-                       },
-    ?debug({global_add_s_group_S, NewS1}),
-    {reply, ok, NewS1};
+handle_call({remove_attribute, Args}, _From, S) ->
+    NewArgs = lists:usort(S#state.attributes--Args),
+    {reply, ok, S#state{attributes = NewArgs}};
 
-handle_call({delete_s_group, SGroupName}, _From, S) ->
-    NewS = S#state{known=[{G, Ns}||{G, Ns} <- S#state.known, G/=SGroupName],
-                   synced=[{G, Ns}||{G, Ns} <- S#state.synced, G/=SGroupName]
-                  },
-    {reply, ok, NewS};
-
-handle_call({remove_s_group_nodes, SGroupName, NodesToRm}, _From, S) ->
-    case lists:member(node(), NodesToRm) of 
-        true ->
-            NewS = S#state{known=[{G, Ns}||{G, Ns} <- S#state.known, G/=SGroupName],
-                           synced=[{G, Ns}||{G, Ns} <- S#state.synced, G/=SGroupName]
-                          },
-            {reply, ok, NewS};
-
-        false ->
-            KnownSGroupNodes = case lists:keyfind(SGroupName, 1, S#state.known) of 
-				  false -> [];
-                                  {_, Ns} -> Ns
-                               end,
-            NewKnownSGroupNodes = KnownSGroupNodes -- NodesToRm,
-            SyncedSGroupNodes = case lists:keyfind(SGroupName, 1, S#state.synced)of 
-                                    false -> [];
-                                    {_, Ns1} -> Ns1
-                                end,
-            NewSyncedSGroupNodes = SyncedSGroupNodes -- NodesToRm,
-            NewKnown = case NewKnownSGroupNodes of 
-                           [] -> lists:keydelete(SGroupName, 1, KnownSGroupNodes);
-                           _ -> lists:keyreplace(SGroupName, 1, S#state.known,
-                                                 {SGroupName, NewKnownSGroupNodes})
-                       end,
-            NewSynced = case NewSyncedSGroupNodes of 
-                           [] -> lists:keydelete(SGroupName, 1, SyncedSGroupNodes);
-                           _ -> lists:keyreplace(SGroupName,1, S#state.synced,  
-                                                 {SGroupName, NewSyncedSGroupNodes})
-                       end,
-            NewS = S#state{known=NewKnown,
-                           synced=NewSynced
-                          },
-            {reply, ok, NewS}
-    end;
+handle_call(registered_attributes, _From, S) ->
+    {reply, S#state.attributes, S};
 
 handle_call(Request, From, S) ->
     error_logger:warning_msg("The global_name_server "
@@ -926,11 +909,10 @@ handle_call(Request, From, S) ->
                              [Request, From]),
     {noreply, S}.
 
+
 %%========================================================================
 %% init_connect
-%%
 %%========================================================================
-
 -spec handle_cast(term(), state()) -> {'noreply', state()}.
 
 handle_cast({init_connect, Vsn, Node, InitMsg}, S) ->
@@ -963,11 +945,14 @@ handle_cast({init_connect, Vsn, Node, InitMsg}, S) ->
 %% Ok, the lock is now set on both partitions. Send our names to other node.
 %%=======================================================================
 handle_cast({lock_is_set, Node, MyTag, LockId}, S) ->
+    ?debug({"handle_lock_is_set_Node_MyTag_LockId_S",
+             Node, MyTag, LockId, S}),
     %% Sent from the_locker at node().
     ?trace({'####', lock_is_set , {node,Node}}),
     case get({sync_tag_my, Node}) of
 	MyTag ->
-            lock_is_set(Node, S#state.resolvers, LockId),
+            ?debug({"handle_lock_is_set_MyTag", MyTag}),
+	    lock_is_set(Node, S#state.resolvers, LockId),
             {noreply, S};
 	_ -> %% Illegal tag, delete the old sync session.
 	    NewS = cancel_locker(Node, S, MyTag),
@@ -981,6 +966,7 @@ handle_cast({lock_is_set, Node, MyTag, LockId}, S) ->
 %%========================================================================
 handle_cast({exchange, Node, NameList, _NameExtList, MyTag}, S) ->
     %% Sent from global_name_server at Node.
+    ?debug({"handle_exchange_Node_NameList_S", Node, NameList, S}),
     case get({sync_tag_my, Node}) of
 	MyTag ->
 	    exchange(Node, NameList, S#state.resolvers),
@@ -1003,7 +989,6 @@ handle_cast({exchange_ops, Group, Node, MyTag, Ops, Resolved}, S0) ->  %% added 
     S = trace_message(S0, {exit_resolver, Node}, [MyTag]),
     case get({sync_tag_my, Node}) of
 	MyTag ->
-            %% Known = S#state.known,
             Known = case lists:keyfind(Group, 1, S#state.known) of 
                          false -> [];
                          {Group, Nodes} -> Nodes
@@ -1015,16 +1000,14 @@ handle_cast({exchange_ops, Group, Node, MyTag, Ops, Resolved}, S0) ->  %% added 
 			     Known, get_names_ext(), get({sync_tag_his, Node})}),
             case get({save_ops, Node}) of
                 {resolved, HisKnown, Names_ext, HisResolved} ->
-                    put({save_ops, Node}, Ops),
+                    ?debug({"put_save_ops1_Node_Ops", Node, Ops}),
+		    put({save_ops, Node}, Ops),
                     NewS = resolved(Group, Node, HisResolved, HisKnown, Names_ext,S),
-		    %% Unregister foreign names
 		    ?debug({"handle_exchange_ops_NewS", NewS}),
                     {noreply, NewS};
-		    %%NewS1 = unregister_foreign_names(NewS),
-		    %%?debug({"handle_exchange_ops_NewS1", NewS1}),
-                    %%{noreply, NewS1};
                 undefined -> 
-                    put({save_ops, Node}, Ops),
+                    ?debug({"put_save_ops2_Node_Ops", Node, Ops}),
+		    put({save_ops, Node}, Ops),
                     {noreply, S}
             end;
 	_ -> %% Illegal tag, delete the old sync session.
@@ -1033,8 +1016,11 @@ handle_cast({exchange_ops, Group, Node, MyTag, Ops, Resolved}, S0) ->  %% added 
     end;
 
 
-handle_cast({exchange_ops_s, CmnSGroups, Node, MyTag, Ops, Resolved}, S0) ->
+handle_cast({exchange_ops_s, Node, CmnSGroups, MyTag, Ops, Resolved}, S0) ->
     %% Sent from the resolver for Node at node().
+    ?debug({"handle_exchange_ops_s_CmnSGroups_Node_MyTag_Ops_Resolved",
+                                   CmnSGroups, Node, MyTag, Ops, Resolved}),
+    ?debug({"handle_exchange_ops_s_S0", S0}),
     ?trace({exchange_ops_s, {node,Node}, {ops,Ops}, {resolved,Resolved}, {mytag,MyTag}}),
     S = trace_message(S0, {exit_resolver, Node}, [MyTag]),
     case get({sync_tag_my, Node}) of
@@ -1042,24 +1028,22 @@ handle_cast({exchange_ops_s, CmnSGroups, Node, MyTag, Ops, Resolved}, S0) ->
 	    %% CmnKnown::[{SGroupName, [Node]}]
             CmnKnown = exchange_ops_s_known(CmnSGroups, [], S),
 	    ?debug({"handle_exchange_ops_s_S", S}),
-	    ?debug({"handle_exchange_ops_Node", Node}),
+	    ?debug({"handle_exchange_ops_Node_CmnKnown", Node, CmnKnown}),
 	    gen_server:cast({global_name_server, Node},
-			    {resolved_s, CmnSGroups, node(), Resolved,
-			     CmnKnown, get_names_ext(),
+			    {resolved_s, node(), CmnSGroups, CmnKnown,
+			     Resolved, get_names_ext(),
 			     get({sync_tag_his, Node})}),
             case get({save_ops, Node}) of
                 {resolved, HisCmnKnown, Names_ext, HisResolved} ->
-                    put({save_ops, Node}, Ops),
-                    NewS = resolved_s(CmnSGroups, Node, HisResolved,
-		                      HisCmnKnown, Names_ext, S),
+                    ?debug({"put_save_ops3_Node_Ops", Node, Ops}),
+		    put({save_ops, Node}, Ops),
+                    NewS = resolved_s(Node, CmnSGroups, HisCmnKnown,
+		                      HisResolved, Names_ext, S),
 		    ?debug({"handle_exchange_ops_NewS", NewS}),
                     {noreply, NewS};
-		    %% Unregister foreign names
-		    %%NewS1 = unregister_foreign_names(NewS),
-		    %%?debug({"handle_exchange_ops_NewS1", NewS1}),
-                    %%{noreply, NewS1};
                 undefined -> 
-                    put({save_ops, Node}, Ops),
+                    ?debug({"put_save_ops4_Node_Ops", Node, Ops}),
+		    put({save_ops, Node}, Ops),
                     {noreply, S}
             end;
 	_ -> %% Illegal tag, delete the old sync session.
@@ -1072,12 +1056,11 @@ handle_cast({exchange_ops_s, CmnSGroups, Node, MyTag, Ops, Resolved}, S0) ->
 %%
 %% Here the name clashes are resolved.
 %%========================================================================
-handle_cast({resolved, Group, Node, HisResolved, HisKnown, _HisKnown_v2,  %%added Group by HL;
+handle_cast({resolved, Group, Node, HisResolved, HisKnown, _HisKnown_v2,
              Names_ext, MyTag}, S) ->
     %% Sent from global_name_server at Node.
     ?trace({'####', resolved, {his_resolved,HisResolved}, {node,Node}}),
     ?debug({"resolvedS", S}),
-    ?debug({resolved_s_group_info, s_group:info()}),
     case get({sync_tag_my, Node}) of
 	MyTag -> 
             %% See the comment at handle_case({exchange_ops, ...}).
@@ -1087,11 +1070,12 @@ handle_cast({resolved, Group, Node, HisResolved, HisKnown, _HisKnown_v2,  %%adde
 		    ?debug({"resolved_NewS", NewS}),
 		    %% Unregister foreign names
 		    NewS1 = unregister_foreign_names(NewS),
-		    ?debug({"resolved_NewS1", NewS1}),
+		    ?debug({"handle_resolved_NewS1", NewS1}),
                     {noreply, NewS1};
                 undefined ->
                     Resolved = {resolved, HisKnown, Names_ext, HisResolved},
-                    put({save_ops, Node}, Resolved),
+                    ?debug({"put_save_ops5_Node_Resolved", Node, Resolved}),
+		    put({save_ops, Node}, Resolved),
                     {noreply, S}
             end;
 	_ -> %% Illegal tag, delete the old sync session.
@@ -1101,31 +1085,38 @@ handle_cast({resolved, Group, Node, HisResolved, HisKnown, _HisKnown_v2,  %%adde
     end;
 
 
-handle_cast({resolved_s, CmnSGroups, Node, HisResolved, HisCmnKnown,
-			                         Names_ext, MyTag}, S) ->
+handle_cast({resolved_s, Node, HisCmnSGroups, HisCmnKnown,
+                         HisResolved, Names_ext, MyTag}, S) ->
     %% Sent from global_name_server at Node.
     ?trace({'####', resolved, {his_resolved, HisResolved}, {node,Node}}),
-    ?debug({"resolved_s_S", S}),
+    ?debug({"handle_resolved_s_S", S}),
     case get({sync_tag_my, Node}) of
 	MyTag -> 
             %% See the comment at handle_case({exchange_ops_s, ...}).
             case get({save_ops, Node}) of
                 Ops when is_list(Ops) ->
-                    NewS = resolved_s(CmnSGroups, Node, HisResolved, 
-		                      HisCmnKnown, Names_ext, S),
-		    ?debug({"resolved_NewS", NewS}),
+                    ?debug({"handle_resolved_s_Node_HisCmnSGroups_HisCmnKnown",
+		             Node, HisCmnSGroups, HisCmnKnown}),
+                    ?debug({"handle_resolved_s_HisResolved_Names_ext",
+			     HisResolved, Names_ext}),
+		    NewS = resolved_s(Node, HisCmnSGroups,
+                                      HisCmnKnown, HisResolved,
+				      Names_ext, S),
+		    ?debug({"handle_resolved_s_NewS", NewS}),
 		    %% Unregister foreign names
 		    NewS1 = unregister_foreign_names(NewS),
-		    ?debug({"resolved_NewS1", NewS1}),
+		    ?debug({"handle_resolved_s_NewS1", NewS1}),
                     {noreply, NewS1};
                 undefined ->
+		    ?debug({"resolved_s_undefined"}),
                     Resolved = {resolved, HisCmnKnown, Names_ext, HisResolved},
-                    put({save_ops, Node}, Resolved),
+                    ?debug({"put_save_ops6_Node_Resolved", Node, Resolved}),
+		    put({save_ops, Node}, Resolved),
                     {noreply, S}
             end;
 	_ -> %% Illegal tag, delete the old sync session.
 	    NewS = cancel_locker(Node, S, MyTag),
-	    ?debug({"resolved_NewSa", NewS}),
+	    ?debug({"handle_resolved_s_NewSa", NewS}),
 	    {noreply, NewS}
     end;
 
@@ -1143,11 +1134,11 @@ handle_cast({new_nodes, Group, Node, Ops, Names_ext, Nodes, ExtraInfo}, S) ->
     ?debug({"new_nodes_NewS1", NewS1}),
     {noreply, NewS1};
 
-handle_cast({new_nodes_s, CSGroups, Node, Ops, Names_ext, CSGroupNodes, ExtraInfo}, S) ->
+handle_cast({new_nodes_s, CmbSGroups, Node, Ops, Names_ext, CSGroupNodes, ExtraInfo}, S) ->
     %% Sent from global_name_server at Node.
     ?debug({"handle_new_nodes_s_S", S}),
     ?trace({new_nodes, {node,Node}, {ops,Ops}, {grnodes,CSGroupNodes}, {x,ExtraInfo}}),
-    NewS = new_nodes1(CSGroups, CSGroupNodes, Ops, Node, Names_ext, ExtraInfo, S),
+    NewS = new_nodes_s(Node, CmbSGroups, CSGroupNodes, Ops, Names_ext, ExtraInfo, S),
     ?debug({"new_nodes_s_NewS", NewS}),
     NewS1 = unregister_foreign_names(NewS),
     ?debug({"new_nodes_NewS1", NewS1}),
@@ -1160,6 +1151,7 @@ handle_cast({new_nodes_s, CSGroups, Node, Ops, Names_ext, CSGroupNodes, ExtraInf
 %%========================================================================
 handle_cast({in_sync, Group, Node, _IsKnown}, S) ->
     %% Sent from global_name_server at Node (in the other partition).
+    ?debug({"handle_cast_in_sync_Group_Node", Group, Node}),
     ?trace({'####', in_sync, {Node, _IsKnown}}),
     lists:foreach(fun(Pid) -> Pid ! {synced, [Node]} end, S#state.syncers),
     NewS = cancel_locker(Node, S, get({sync_tag_my, Node})),
@@ -1167,19 +1159,26 @@ handle_cast({in_sync, Group, Node, _IsKnown}, S) ->
     Synced = NewS#state.synced,
     NSynced =  case lists:keyfind(Group, 1, Synced) of 
                    false -> 
-                       [{Group, [Node]}|Synced];
+                       [{Group, [Node]} | Synced];
                    {Group, Ss}->
-                       lists:keyreplace(Group,1, Synced,{Group, [Node|Ss]})
+                       lists:keyreplace(Group, 1, Synced,
+		                        {Group, lists:usort([Node | Ss])})
                end,
+    ?debug({"handle_cast_in_sync_NewSa", NewS}),
+    ?debug({"handle_cast_in_sync_NewSb", NewS#state{synced = NSynced}}),
     {noreply, NewS#state{synced = NSynced}};
 
 handle_cast({in_sync_s, CmnSGroups, Node, _IsKnown}, S) ->
+    ?debug({"handle_cast_in_sync_s_CmnSGroups_Node_S",
+             CmnSGroups, Node, S}),			
     %% Sent from global_name_server at Node
     ?trace({'####', in_sync, {Node, _IsKnown}}),
     lists:foreach(fun(Pid) -> Pid ! {synced, [Node]} end, S#state.syncers),
     NewS = cancel_locker(Node, S, get({sync_tag_my, Node})),
     reset_node_state(Node),
+    ?debug({"in_sync_s_NewS", NewS}),
     NSynced = check_in_sync(Node, CmnSGroups, NewS#state.synced),
+    ?debug({"handle_in_sync_s_NSynced", NSynced}),
     {noreply, NewS#state{synced = NSynced}};
 
 %% Called when Pid on other node crashed
@@ -1241,30 +1240,40 @@ handle_info({nodeup, Node}, S) when Node =:= node() ->
     ?trace({'####', local_nodeup, {node, Node}}),
     %% Somebody started the distribution dynamically - change
     %% references to old node name ('nonode@nohost') to Node.
+    ?debug({"nodeup1_Node", Node}),
     {noreply, change_our_node_name(Node, S)};
-
 handle_info({nodeup, _Group, Node}, S) when Node =:= node() ->
     ?trace({'####', local_nodeup, {node, Node}}),
     %% Somebody started the distribution dynamically - change
     %% references to old node name ('nonode@nohost') to Node.
+    ?debug({"nodeup2_Node", Node}),
+    {noreply, change_our_node_name(Node, S)};
+handle_info({nodeup_s, _CmnSGroups, Node}, S) when Node =:= node() ->
+    ?trace({'####', local_nodeup, {node, Node}}),
+    %% Somebody started the distribution dynamically - change
+    %% references to old node name ('nonode@nohost') to Node.
+    ?debug({"nodeup3_Node", Node}),
     {noreply, change_our_node_name(Node, S)};
 
 handle_info({nodeup, _Node}, S) when not S#state.connect_all ->
+    ?debug({"nodeup4"}),
     {noreply, S};
-
 handle_info({nodeup, _Group, _Node}, S) when not S#state.connect_all ->
+    ?debug({"nodeup5"}),
+    {noreply, S};
+handle_info({nodeup_s, _CmnSGroups, _Node}, S) when not S#state.connect_all ->
+    ?debug({"nodeup6"}),
     {noreply, S};
 
 handle_info({nodeup, Node}, S0) when S0#state.connect_all ->
-    %%?debug({nodeup, Node}),
+    ?debug({"nodeup7_Node", Node}),
     handle_node_up(no_group, Node, S0);
 handle_info({nodeup, Group, Node}, S0) when S0#state.connect_all ->
-    ?debug({global_nodeup, Group, Node}),
+    ?debug({"nodeup8_Node_Group", Node, Group}),
     handle_node_up(Group, Node, S0);
-
 handle_info({nodeup_s, CmnSGroups, Node}, S0) when S0#state.connect_all ->
-    %% CmnGroups::[SGroupName]
-    ?debug({global_nodeup_s, CmnSGroups, Node}),
+    %% CmnSGroups::[SGroupName]
+    ?debug({"nodeup9_Node_CmnSGroups", Node, CmnSGroups}),
     handle_node_up_s(CmnSGroups, Node, S0);
 
 handle_info({whereis, Name, From}, S) ->
@@ -1272,8 +1281,54 @@ handle_info({whereis, Name, From}, S) ->
     {noreply, S};
 
 handle_info(known, S) ->
-    io:format(">>>> ~p\n",[S#state.known]),
     {noreply, S};
+
+handle_info({init_own_s_groups, OwnSGroups}, S0) ->
+    %% OwnSGroups::[{SGroupName, [Node]}]
+    ?debug({"init_s_groups", OwnSGroups}),
+    {noreply, S0#state{own_s_groups = OwnSGroups}};
+
+handle_info({own_s_group_update, SGroupName, Nodes}, S) ->
+    %% OwnSGroups::[{SGroupName, [Node]}]
+    ?debug({"own_s_group_update", SGroupName, Nodes}),
+    OwnSGroups = S#state.own_s_groups,
+    NewOwnSGroups = case lists:keyfind(SGroupName, 1, OwnSGroups) of
+                        false -> [{SGroupName, Nodes} | OwnSGroups];
+		      	_ -> lists:keyreplace(SGroupName, 1, OwnSGroups,
+		                              {SGroupName, Nodes})
+                    end,
+    {noreply, S#state{own_s_groups = NewOwnSGroups}};
+
+handle_info({own_s_group_remove, SGroupName, Nodes, KeepConnected}, S) ->
+    %% OwnSGroups::[{SGroupName, [Node]}]
+    ?debug({"own_s_group_update", SGroupName, Nodes}),
+    OwnSGroups = S#state.own_s_groups,
+    NewOwnSGroups = lists:keyreplace(SGroupName, 1, OwnSGroups,
+		                     {SGroupName, Nodes}),
+    {SGroupName, NodesK} = lists:keyfind(SGroupName, 1, S#state.known),
+    NewKnown = lists:keyreplace(SGroupName, 1, S#state.known, 
+                                {SGroupName, NodesK--KeepConnected}),
+    {SGroupName, NodesS} = lists:keyfind(SGroupName, 1, S#state.synced),
+    NewSynced = lists:keyreplace(SGroupName, 1, S#state.synced, 
+                                 {SGroupName, NodesS--KeepConnected}),
+    NewS = S#state{own_s_groups = NewOwnSGroups,
+                   known = NewKnown,
+		   synced = NewSynced
+		   },
+    {noreply, NewS};
+
+handle_info({own_s_group_delete, SGroupName}, S) ->
+    %% OwnSGroups::[{SGroupName, [Node]}]
+    ?debug({"own_s_group_delete", SGroupName}),
+    NewOwnSGroups = lists:keydelete(SGroupName, 1, S#state.own_s_groups),
+    NewKnown = lists:keydelete(SGroupName, 1, S#state.known),
+    NewSynced = lists:keydelete(SGroupName, 1, S#state.synced),
+    S1 = S#state{own_s_groups = NewOwnSGroups,
+                 known = NewKnown,
+		 synced = NewSynced
+		 },
+    NewS = unregister_foreign_names(S1),
+    {noreply, NewS};
 
 %% "High level trace". For troubleshooting only.
 handle_info(high_level_trace, S) ->
@@ -1348,15 +1403,12 @@ handle_node_up(Group, Node, S0) ->
             NotAPid = no_longer_a_pid,
             Locker = {locker, NotAPid, S2#state.known, S2#state.the_locker},
             InitC = {init_connect, {?vsn, MyTag}, node(), Locker},
-            %%?debug(InitC),
 	    Rs = S2#state.resolvers,
             ?trace({casting_init_connect, {node,Node},{initmessage,InitC},
                     {resolvers,Rs}}),
-	    gen_server:cast({global_name_server, Node}, InitC),		%NC?
+	    gen_server:cast({global_name_server, Node}, InitC),
             Resolver = start_resolver(Group, Node, MyTag),
-	    %%?debug({"node_up_S2", S2}),
             S = trace_message(S2, {new_resolver, Node}, [MyTag, Resolver]),
-	    %%?debug({"node_up_S", S}),
 	    {noreply, S#state{resolvers = [{Node, MyTag, Resolver} | Rs]}}
     end.
 
@@ -1427,31 +1479,21 @@ replace_no_group(Group, S) ->
     Known = S#state.known,
     Synced = S#state.synced,
     ?debug({"replace_no_group_Group_Known_Synced", Group, Known, Synced}),
-    %% The state should depend on whether Group=='no_group'
     S1 = case lists:keyfind(no_group, 1, Known) of
-             false -> S;
+             false ->
+	         S;
              {no_group, KnownNodes} ->
-		      S#state{known=lists:keyreplace(no_group, 1, Known,
-			  			     {Group, KnownNodes})}
+		 S#state{known=lists:keyreplace(no_group, 1, Known,
+			  			{Group, KnownNodes})}
          end,
     case lists:keyfind(no_group, 1, Synced) of
-        false -> S1;
+        false ->
+	     S1;
         {no_group, SyncedNodes} ->
-		 S1#state{synced=lists:keyreplace(no_group, 1, Synced,
-	    				          {Group, SyncedNodes})}
+	     S1#state{synced=lists:keyreplace(no_group, 1, Synced,
+	    				      {Group, SyncedNodes})}
     end.
 
-
-disconnect_synced_nodes([], _DisconNodes) ->
-    ok;
-disconnect_synced_nodes([Node | RemConNodes], DisconNodes) ->
-    case lists:member(Node, DisconNodes) of
-        true ->
-	     disconnect_synced_nodes(RemConNodes, DisconNodes);
-	false ->
-	     erlang:disconnect_node(Node),
-	     disconnect_synced_nodes(RemConNodes, [Node | DisconNodes])
-    end.
 
 %%========================================================================
 %%========================================================================
@@ -1491,6 +1533,7 @@ trans_all_known(Fun) ->
     end.
 
 set_lock_known(Id, Times) -> 
+    ?debug("set_lock_known"),
     Known = get_known(),
     Nodes = [node() | Known],
     Boss = the_boss(Nodes),
@@ -1511,6 +1554,7 @@ set_lock_known(Id, Times) ->
     end.
 
 lock_on_known_nodes(Id, Known, Nodes) ->
+    ?debug("lock_on_known_nodes"),
     case set_lock_on_nodes(Id, Nodes) of
         true ->
             (get_known() -- Known) =:= [];
@@ -1561,14 +1605,17 @@ lock_on_s_group_nodes(Id, Known, Nodes, SGroupName) ->
 set_lock_on_nodes(_Id, []) ->
     true;
 set_lock_on_nodes(Id, Nodes) ->
+    ?debug("set_lock_on_nodes1"),
     case local_lock_check(Id, Nodes) of 
         true ->
+    	    ?debug({"set_lock_on_nodes2_Nodes", Nodes}),
             Msg = {set_lock, Id},
             {Replies, _} = 
                 gen_server:multi_call(Nodes, global_name_server, Msg),
             ?trace({set_lock,{me,self()},Id,{nodes,Nodes},{replies,Replies}}),
             check_replies(Replies, Id, Replies);
         false=Reply ->
+    	    ?debug("set_lock_on_nodes3"),
             Reply
     end.
 
@@ -1585,6 +1632,7 @@ check_replies([{_Node, false=Reply} | _T], _Id, [_]) ->
 check_replies([{_Node, false=Reply} | _T], Id, Replies) ->
     TrueReplyNodes = [N || {N, true} <- Replies],
     ?trace({check_replies, {true_reply_nodes, TrueReplyNodes}}),
+    ?debug({"check_replies_TrueReplyNodes", TrueReplyNodes}),
     gen_server:multi_call(TrueReplyNodes, global_name_server, {del_lock, Id}),
     Reply;
 check_replies([], _Id, _Replies) ->
@@ -1628,6 +1676,7 @@ init_connect(Vsn, Node, InitMsg, HisTag, Resolvers, S) ->
 %% exchange info is stored, in that case we take care of it.
 %%========================================================================
 lock_is_set(Node, Resolvers, LockId) ->
+    ?debug({"lock_is_set_Node_Resolvers_LockId", Node, Resolvers, LockId}),
     gen_server:cast({global_name_server, Node},
                     {exchange, node(), get_names(), _ExtNames = [],
                      get({sync_tag_his, Node})}),
@@ -1657,7 +1706,6 @@ exchange(Node, NameList, Resolvers) ->
     end.
 
 resolved(Group, Node, HisResolved, HisKnown, Names_ext, S0) -> 
-    %%?debug({"resolved", }),
     ?debug({"resolved_m", Group, Node, HisResolved, HisKnown, Names_ext}),
     ?debug({"resolved_S0", S0}),
     Ops = erase({save_ops, Node}) ++ HisResolved,
@@ -1670,6 +1718,7 @@ resolved(Group, Node, HisResolved, HisKnown, Names_ext, S0) ->
     ?debug({"resolved_Known", Known}),
     NewNodes = [Node | HisKnown],
     ?debug({"resolved_HisKnown_NewNodes", HisKnown, NewNodes}),
+    ?debug({"sync_others1"}),
     sync_others(Group, HisKnown),
     ExtraInfo = [{vsn,get({prot_vsn, Node})}, {lock, get({lock_id, Node})}],
     ?debug({"resolved_ExtraInfo", ExtraInfo}),
@@ -1695,23 +1744,24 @@ resolved(Group, Node, HisResolved, HisKnown, Names_ext, S0) ->
     S4 = cancel_resolved_locker(Node, F),
     %% See (*) below... we're node b in that description
     AddedNodes = (NewNodes -- Known),
-    NewKnown0 = Known ++ AddedNodes,
+    NewKnown0 = lists:usort(Known ++ AddedNodes),
     S4#state.the_locker ! {add_to_known, AddedNodes},
     NewS = trace_message(S4, {added, AddedNodes}, 
                          [{new_nodes, NewNodes}, {abcast, Known}, {ops,Ops}]),
     ?debug({"resolved_NewS", NewS}),
 
     NewKnown = case lists:keyfind(Group, 1, NewS#state.known) of 
-                   false -> [{Group, NewKnown0}|NewS#state.known];
+                   false -> [{Group, NewKnown0} | NewS#state.known];
                    _ -> lists:keyreplace(Group, 1, NewS#state.known, 
                                          {Group, NewKnown0})
                end,
     Synced = NewS#state.synced,
     NewSynced = case lists:keyfind(Group, 1, Synced) of 
                     false -> 
-                        [{Group, [Node]}|Synced];
+                        [{Group, [Node]} | Synced];
                     {Group, Ss}->
-                        lists:keyreplace(Group,1, Synced,{Group, [Node|Ss]})
+                        lists:keyreplace(Group,1, Synced,
+			                 {Group, lists:usort([Node | Ss])})
                 end,
     ?debug({"resolved_NewKnown_Synced_NewSynced", NewKnown, Synced, NewSynced}),
     NewS#state{known = NewKnown, 
@@ -1732,6 +1782,7 @@ new_nodes(Ops, Group, ConnNode, Names_ext, Nodes, ExtraInfo, S0) ->
     %% b from c, leading to b sending {new_nodes, [a]} to us (node a).
     %% Therefore, we make sure we never get duplicates in Known.
     AddedNodes = lists:delete(node(), Nodes -- Known),
+    ?debug({"sync_others2"}),
     sync_others(Group, AddedNodes),
     S = do_ops(Ops, ConnNode, Names_ext, ExtraInfo, S0),
     ?trace({added_nodes_in_sync,{added_nodes,AddedNodes}}),
@@ -1739,27 +1790,24 @@ new_nodes(Ops, Group, ConnNode, Names_ext, Nodes, ExtraInfo, S0) ->
     S1 = trace_message(S, {added, AddedNodes}, [{ops,Ops}]),
     Known = S1#state.known,
     NewKnown = case lists:keyfind(Group, 1, Known) of 
-                   false -> [{Group, AddedNodes} | Known];
+                   false ->
+		       [{Group, lists:usort(AddedNodes)} | Known];
                    {Group, Ns}-> 
                        lists:keyreplace(Group, 1, Known, 
-                                        {Group, lists:usort(Ns)++AddedNodes})
+                                        {Group, lists:usort(Ns++AddedNodes)})
                end,
     S1#state{known = NewKnown}.
 
-new_nodes_s(Ops, Group, ConnNode, Names_ext, Nodes, ExtraInfo, S0) ->
-    %?debug({"new_nodes_s_", }),
-    ?debug({"new_nodes_s_Ops", Ops}),
-    ?debug({"new_nodes_s_Group", Group}),
-    ?debug({"new_nodes_s_Nodes", Nodes}),
+new_nodes_s(ConnNode, CmbSGroups, CSGroupNodes, Ops, Names_ext, ExtraInfo, S0) ->
+    ?debug({"new_nodes_s_ConnNode_CmbSGroups_CSGroupNodes",
+                         ConnNode, CmbSGroups, CSGroupNodes}),
+    ?debug({"new_nodes_s_Ops_Names_ext_ExtraInfo", Ops, Names_ext, ExtraInfo}),
     ?debug({"new_nodes_s_S0", S0}),
 
     Known = S0#state.known,
-    KnownNodes = case lists:keyfind(Group, 1, Known) of
-                     {Group, KnownNodes1} -> KnownNodes1;
-		     false -> []
-                 end,
+    CmbSGroupNodes = combine_known(ConnNode, CmbSGroups, CSGroupNodes),
     ?debug({"new_nodes_s_Known", Known}),
-    ?debug({"new_nodes_s_KnownNodes", KnownNodes}),
+    ?debug({"new_nodes_s_CmbSGroupNodes", CmbSGroupNodes}),
 
     %% (*) This one requires some thought...
     %% We're NodeA, other NodeB and NodeC:
@@ -1767,26 +1815,27 @@ new_nodes_s(Ops, Group, ConnNode, Names_ext, Nodes, ExtraInfo, S0) ->
     %% {resolved, [NodeA]} to NodeB from NodeC, leading to NodeB
     %% sending {new_nodes, [NodeA]} to us (NodeA).
     %% Therefore, we make sure we never get duplicates in Known.
-    AddedNodes = lists:delete(node(), Nodes -- KnownNodes),
-    ?debug({"new_nodes_s_AddedNodes", AddedNodes}),
+    AddedSGroupNodes = added_s_group_nodes(CmbSGroupNodes, Known),
+    AddedNodeSGroups = s_group:ng_pairs(AddedSGroupNodes),
+    sync_others_s(AddedNodeSGroups),
+    ?debug({"sync_others3"}),
+    ?debug({"new_nodes_s_AddedSGroupNodes", AddedSGroupNodes}),
+    ?debug({"new_nodes_s_AddedNodeSGroups", AddedNodeSGroups}),
 
-    sync_others(Group, AddedNodes),
     S = do_ops(Ops, ConnNode, Names_ext, ExtraInfo, S0),
     ?debug({"new_nodes_s_S", S}),
 
-    ?trace({added_nodes_in_sync,{added_nodes_s,AddedNodes}}),
-    S#state.the_locker ! {add_to_known, AddedNodes},
-    S1 = trace_message(S, {added, AddedNodes}, [{ops,Ops}]),
+    TotalAddedNodes = [N || {N, _Grs} <- AddedNodeSGroups],
+    ?trace({added_nodes_in_sync,{added_nodes_s,TotalAddedNodes}}),
+    S#state.the_locker ! {add_to_known, TotalAddedNodes},
+    S1 = trace_message(S, {added, TotalAddedNodes}, [{ops,Ops}]),
+    ?debug({"new_nodes_s_TotalAddedNodes", TotalAddedNodes}),
     ?debug({"new_nodes_s_S1", S1}),
+
     Known1 = S1#state.known,
     ?debug({"new_nodes_s_Known1", Known1}),
-    NewKnown = case lists:keyfind(Group, 1, Known1) of 
-                   false -> [{Group, AddedNodes} | Known1];
-                   {Group, Ns}-> 
-                       lists:keyreplace(Group, 1, Known1, 
-                                        {Group, lists:usort(Ns)++AddedNodes})
-               end,
-    ?debug({"new_nodes_s_NewKnown", NewKnown}),
+    NewKnown = new_known(CmbSGroups, Known1, AddedSGroupNodes),
+    ?debug({"new_nodes_s_News", S1#state{known = NewKnown}}),
     S1#state{known = NewKnown}.
 
 
@@ -1799,7 +1848,6 @@ do_whereis(Name, From) ->
     end.
 
 -spec terminate(term(), state()) -> 'ok'.
-
 terminate(_Reason, _S) ->
     true = ets:delete(global_names),
     true = ets:delete(global_names_ext),
@@ -1809,7 +1857,6 @@ terminate(_Reason, _S) ->
     ok.
 
 -spec code_change(term(), state(), term()) -> {'ok', state()}.
-
 code_change(_OldVsn, S, _Extra) ->
     {ok, S}.
 
@@ -1817,7 +1864,6 @@ code_change(_OldVsn, S, _Extra) ->
 %% is that locks can be used at the same time as name resolution takes
 %% place.
 start_resolver(Group, Node, MyTag) ->
-    %%?debug({"start_resolver_info", info()}),
     spawn(fun() -> resolver(Group, Node, MyTag) end).
 
 resolver(Group, Node, Tag) ->
@@ -1825,7 +1871,20 @@ resolver(Group, Node, Tag) ->
         {resolve, NameList, Node} ->
             ?trace({resolver, {me,self()}, {node,Node}, {namelist,NameList}}),
             {Ops, Resolved} = exchange_names(NameList, Node, [], []),
-            Exchange = {exchange_ops, Group, Node, Tag, Ops, Resolved},
+	    OwnSGroups = own_s_groups(),
+	    Exchange =
+	        case OwnSGroups of
+	            [] ->
+		       {exchange_ops, Group, Node, Tag, Ops, Resolved};
+	            _ ->
+		       OwnNodeSGroups = s_group:ng_pairs(OwnSGroups),
+		       CmnSGroups =
+		          case lists:keyfind(Node, 1, OwnNodeSGroups) of
+			      false -> [];
+			      {Node, SGroups} -> SGroups
+			  end,
+		       {exchange_ops_s, Node, CmnSGroups, Tag, Ops, Resolved}
+	    end,
             gen_server:cast(global_name_server, Exchange),
             exit(normal);
         _ -> % Ignore garbage.
@@ -1835,39 +1894,34 @@ resolver(Group, Node, Tag) ->
 resend_pre_connect(Node) ->
     case erase({pre_connect, Node}) of
 	{Vsn, InitMsg, HisTag} ->
+	    ?debug({"resend_pre_connect_init_connect", Node}),
 	    gen_server:cast(self(), 
                             {init_connect, {Vsn, HisTag}, Node, InitMsg});
 	_ ->
 	    ok
     end.
 
-%%ins_name(Name, Pid, Method, FromPidOrNode, ExtraInfo, S0) ->	%NC
-%%    ins_name(Name, undefined, Pid, Method, FromPidOrNode, ExtraInfo, S0).
-
-ins_name(Name, SGroupName, Pid, Method, FromPidOrNode, ExtraInfo, S0) ->	%NC
-    ?trace({ins_name,insert,{name,Name},{pid,Pid}}),   % NC?
-    S1 = delete_global_name_keep_pid(Name, SGroupName, S0),
-    S = trace_message(S1, {ins_name, node(Pid)}, [{Name, SGroupName}, Pid]),
-    insert_global_name(Name, SGroupName, Pid, Method, FromPidOrNode,
+ins_name(SGroupName, Name, Pid, Method, FromPidOrNode, ExtraInfo, S0) ->
+    ?trace({ins_name,insert,{name,Name},{pid,Pid}}),
+    S1 = delete_global_name_keep_pid(SGroupName, Name, S0),
+    S = trace_message(S1, {ins_name, node(Pid)}, [{SGroupName, Name}, Pid]),
+    insert_global_name(SGroupName, Name, Pid, Method, FromPidOrNode,
     ExtraInfo, S).
 
-%%ins_name_ext(Name, Pid, Method, RegNode, FromPidOrNode, ExtraInfo, S0) ->	%NC
-%%    ins_name_ext(Name, undefined, Pid, Method, RegNode, FromPidOrNode, ExtraInfo, S0).
-
-ins_name_ext(Name, SGroupName, Pid, Method, RegNode, FromPidOrNode, ExtraInfo, S0) ->
+ins_name_ext(SGroupName, Name, Pid, Method, RegNode, FromPidOrNode, ExtraInfo, S0) ->
     ?trace({ins_name_ext, {name,Name}, {pid,Pid}}),
-    S1 = delete_global_name_keep_pid(Name, SGroupName, S0),
+    S1 = delete_global_name_keep_pid(SGroupName, Name, S0),
     dolink_ext(Pid, RegNode),
-    S = trace_message(S1, {ins_name_ext, node(Pid)}, [Name, SGroupName,Pid]),
-    true = ets:insert(global_names_ext, {{Name, SGroupName}, Pid, RegNode}),
-    insert_global_name(Name, SGroupName, Pid, Method, FromPidOrNode, ExtraInfo, S).
+    S = trace_message(S1, {ins_name_ext, node(Pid)}, [SGroupName, Name, Pid]),
+    true = ets:insert(global_names_ext, {{SGroupName, Name}, Pid, RegNode}),
+    insert_global_name(SGroupName, Name, Pid, Method, FromPidOrNode, ExtraInfo, S).
 
 where(Name) ->
-    where(Name, undefined).
+    where(undefined, Name).
 
-where(Name, SGroupName) ->
-    case ets:lookup(global_names, {Name, SGroupName}) of
-	[{{_Name, _SGroupName}, Pid, _Method, _RPid, _Ref}] ->
+where(SGroupName, Name) ->
+    case ets:lookup(global_names, {SGroupName, Name}) of
+	[{{_SGroupName, _Name}, Pid, _Method, _RPid, _Ref}] ->
 	    if node(Pid) == node() ->
 		    case is_process_alive(Pid) of
 			true  -> Pid;
@@ -1880,6 +1934,7 @@ where(Name, SGroupName) ->
     end.
 
 handle_set_lock(Id, Pid, S) ->
+    ?debug("handle_set_lock"),
     ?trace({handle_set_lock, Id, Pid}),
     case can_set_lock(Id) of
         {true, PidRefs} ->
@@ -1894,6 +1949,7 @@ handle_set_lock(Id, Pid, S) ->
     end.
 
 can_set_lock({ResourceId, LockRequesterId}) ->
+    ?debug("can_set_lock"),
     case ets:lookup(global_locks, ResourceId) of
 	[{ResourceId, LockRequesterId, PidRefs}] ->
             {true, PidRefs};
@@ -1961,29 +2017,31 @@ kill_monitor_proc(Pid, Pid) ->
 kill_monitor_proc(RPid, _Pid) ->
     exit(RPid, kill).
 
-do_ops(Ops, ConnNode, Names_ext, ExtraInfo, S0) ->	%NC? ins_name/6
+do_ops(Ops, ConnNode, Names_ext, ExtraInfo, S0) ->
     ?trace({do_ops, {ops,Ops}}),
 
-    XInserts = [{{Name, SGroupName}, Pid, RegNode, Method} ||
-                   {{Name2, SGroupName2}, Pid2, RegNode} <- Names_ext,
-                   {insert, {{Name, SGroupName}, Pid, Method}} <- Ops,
+    XInserts = [{{SGroupName, Name}, Pid, RegNode, Method} ||
+                   {{SGroupName2, Name2}, Pid2, RegNode} <- Names_ext,
+                   {insert, {{SGroupName, Name}, Pid, Method}} <- Ops,
                    Name =:= Name2, SGroupName =:= SGroupName2, Pid =:= Pid2],
-    S1 = lists:foldl(fun({{Name, SGroupName}, Pid, RegNode, Method}, S1) ->
-                             ins_name_ext(Name, SGroupName, Pid, Method, RegNode, 
+    S1 = lists:foldl(fun({{SGroupName, Name}, Pid, RegNode, Method}, S1) ->
+                             ins_name_ext(SGroupName, Name, Pid, Method, RegNode, 
                                           ConnNode, ExtraInfo, S1)
                      end, S0, XInserts),
 
-    XNames = [{Name, SGroupName} || {{Name, SGroupName}, _Pid, _RegNode, _Method} <- XInserts],
-    Inserts = [{{Name, SGroupName}, Pid, node(Pid), Method} || 
-                  {insert, {{Name, SGroupName}, Pid, Method}} <- Ops,
-                  not lists:member({Name, SGroupName}, XNames)],
-    S2 = lists:foldl(fun({{Name, SGroupName}, Pid, _RegNode, Method}, S2) ->
-                            ins_name(Name, SGroupName, Pid, Method, ConnNode, 
+    XNames = [{SGroupName, Name} || {{SGroupName, Name}, _Pid, _RegNode, _Method} <- XInserts],
+    Inserts = [{{SGroupName, Name}, Pid, node(Pid), Method} || 
+                  {insert, {{SGroupName, Name}, Pid, Method}} <- Ops,
+                  not lists:member({SGroupName, Name}, XNames)],
+    S2 = lists:foldl(fun({{SGroupName, Name}, Pid, _RegNode, Method}, S2) ->
+                            ins_name(SGroupName, Name, Pid, Method, ConnNode, 
                                      ExtraInfo, S2)
                     end, S1, Inserts),
 
-    DelNames = [{Name, SGroupName} || {delete, {Name, SGroupName}} <- Ops],
-    lists:foldl(fun({Name, SGroupName}, S) -> delete_global_name2(Name, SGroupName, S) end, S2, DelNames).
+    DelNames = [{SGroupName, Name} || {delete, {SGroupName, Name}} <- Ops],
+    lists:foldl(fun({SGroupName, Name}, S) ->
+                    delete_global_name2(SGroupName, Name, S)
+		end, S2, DelNames).
 
 %% It is possible that a node that was up and running when the
 %% operations were assembled has since died. The final {in_sync,...}
@@ -1999,6 +2057,7 @@ do_ops(Ops, ConnNode, Names_ext, ExtraInfo, S0) ->	%NC? ins_name/6
 %% case that a nodedown message is received _before_ the operations
 %% are run.
 sync_others(Group, Nodes) ->
+    ?debug({"sync_others_fun"}),
     N = case application:get_env(kernel, ?N_CONNECT_RETRIES) of
             {ok, NRetries} when is_integer(NRetries), 
                                 NRetries >= 0 -> NRetries;
@@ -2009,6 +2068,7 @@ sync_others(Group, Nodes) ->
                   end, Nodes).
 
 sync_other(Group, Node, N) ->
+    ?debug({"sync_other_fun"}),
     erlang:monitor_node(Node, true, [allow_passive_connect]),
     receive
         {nodedown, Node} when N > 0 ->
@@ -2022,43 +2082,13 @@ sync_other(Group, Node, N) ->
             gen_server:cast({global_name_server, Node}, {in_sync, Group, node(),true})
     end.
 
-%%insert_global_name(Name, Pid, Method, FromPidOrNode, ExtraInfo, S) ->	%NC
-%%    insert_global_name(Name, undefined, Pid, Method, FromPidOrNode, ExtraInfo, S).
-
-insert_global_name(Name, SGroupName, Pid, Method, FromPidOrNode, ExtraInfo, S) ->	%NC
-    ?debug({"insert_global_name", Name, SGroupName}),
+insert_global_name(SGroupName, Name, Pid, Method, FromPidOrNode, ExtraInfo, S) ->
+    ?debug({"insert_global_name", SGroupName, Name}),
     {RPid, Ref} = do_monitor(Pid),
-%    RpcCallRes = rpc:call(node(), s_group, s_group_state, []),
-%    ?debug({"RpcCallRes", RpcCallRes}),
-%    Flag = case RpcCallRes of
-%    	       {ok, undefined, _OwnGrps} ->
-%                            case SGroupName of
-%		                undefined -> yes;
-%				_ -> no
-%		            end;
-%    	       {ok, _NodeGrps, OwnGrps} ->
-%                    case lists:keymember(SGroupName, 1, OwnGrps) of
-%		        true -> yes;
-%			_ -> no
-%                    end;
-%	       _ ->
-%                   no
-%           end,
-%     ?debug({"Flag", Flag}),
-%    case Flag of
-%        yes ->
-%             ?debug({"yes", yes}),
-%	     true = ets:insert(global_names, {{Name, SGroupName}, Pid, Method, RPid, Ref}),
-%    	     true = ets:insert(global_pid_names, {Pid, {Name, SGroupName}}),
-%    	     true = ets:insert(global_pid_names, {Ref, {Name, SGroupName}});
-%        _ ->
-%             ?debug({"no", no}),
-%	     true = true
-%    end,
 
-    true = ets:insert(global_names, {{Name, SGroupName}, Pid, Method, RPid, Ref}),
-    true = ets:insert(global_pid_names, {Pid, {Name, SGroupName}}),
-    true = ets:insert(global_pid_names, {Ref, {Name, SGroupName}}),
+    true = ets:insert(global_names, {{SGroupName, Name}, Pid, Method, RPid, Ref}),
+    true = ets:insert(global_pid_names, {Pid, {SGroupName, Name}}),
+    true = ets:insert(global_pid_names, {Ref, {SGroupName, Name}}),
 
     case lock_still_set(FromPidOrNode, ExtraInfo, S) of
         true -> 
@@ -2072,7 +2102,7 @@ insert_global_name(Name, SGroupName, Pid, Method, FromPidOrNode, ExtraInfo, S) -
             %% Note: it is assumed here that the DOWN signal arrives
             %% _before_ nodeup and any message that caused nodeup.
             %% This is true of Erlang/OTP.
-            delete_global_name2(Name, SGroupName, S)
+            delete_global_name2(SGroupName, Name, S)
     end.
 
 lock_still_set(PidOrNode, ExtraInfo, S) ->
@@ -2097,59 +2127,53 @@ extra_info(Tag, ExtraInfo) ->
     end.
 
 del_name(Ref, S) ->
-    NameL = [{Name, SGroupName} || 
-                {_, {Name, SGroupName}} <- ets:lookup(global_pid_names, Ref),
+    NameL = [{SGroupName, Name} || 
+                {_, {SGroupName, Name}} <- ets:lookup(global_pid_names, Ref),
                 {_, _Pid, _Method, _RPid, Ref1} <- 
-                    ets:lookup(global_names, {Name, SGroupName}),
+                    ets:lookup(global_names, {SGroupName, Name}),
                 Ref1 =:= Ref],
     case NameL of
-        [{Name, SGroupName}] ->
-            delete_global_name2(Name, SGroupName, S);
+        [{SGroupName, Name}] ->
+            delete_global_name2(SGroupName, Name, S);
         [] ->
             S
     end.
 
 %% Keeps the entry in global_names for whereis_name/1.
-%%delete_global_name_keep_pid(Name, S) ->		%NC
-%%    delete_global_name_keep_pid(Name, undefined, S).
-
-delete_global_name_keep_pid(Name, SGroupName, S) ->	% NC
-    case ets:lookup(global_names, {Name, SGroupName}) of
-        [{{Name, SGroupName}, Pid, _Method, RPid, Ref}] ->
-            delete_global_name2(Name, SGroupName, Pid, RPid, Ref, S);
+delete_global_name_keep_pid(SGroupName, Name, S) ->
+    case ets:lookup(global_names, {SGroupName, Name}) of
+        [{{SGroupName, Name}, Pid, _Method, RPid, Ref}] ->
+            delete_global_name2(SGroupName, Name, Pid, RPid, Ref, S);
         [] ->
             S
     end.
 
-%%delete_global_name2(Name, S) ->		%NC
-%%    delete_global_name2(Name, undefined, S).
-
-delete_global_name2(Name, SGroupName, S) ->	%NC
-    case ets:lookup(global_names, {Name, SGroupName}) of
-        [{{Name, SGroupName}, Pid, _Method, RPid, Ref}] ->
-            true = ets:delete(global_names, {Name, SGroupName}),
-            delete_global_name2(Name, SGroupName, Pid, RPid, Ref, S);
+delete_global_name2(SGroupName, Name, S) ->
+    case ets:lookup(global_names, {SGroupName, Name}) of
+        [{{SGroupName, Name}, Pid, _Method, RPid, Ref}] ->
+            true = ets:delete(global_names, {SGroupName, Name}),
+            delete_global_name2(SGroupName, Name, Pid, RPid, Ref, S);
         [] ->
             S
     end.
 
-delete_global_name2(Name, SGroupName, Pid, RPid, Ref, S) ->	%NC
+delete_global_name2(SGroupName, Name, Pid, RPid, Ref, S) ->
     true = erlang:demonitor(Ref, [flush]),
     kill_monitor_proc(RPid, Pid),
-    delete_global_name({Name, SGroupName}, Pid),
-    ?trace({delete_global_name,{item,Name},{pid,Pid}}),	%NC?
-    true = ets:delete_object(global_pid_names, {Pid, {Name, SGroupName}}),
-    true = ets:delete_object(global_pid_names, {Ref, {Name, SGroupName}}),
-    case ets:lookup(global_names_ext, {Name, SGroupName}) of
-	[{{Name, SGroupName}, Pid, RegNode}] ->
-            true = ets:delete(global_names_ext, {Name, SGroupName}),
-            ?trace({delete_global_name, {name,Name,{pid,Pid},{RegNode,Pid}}}),	%NC
+    delete_global_name({SGroupName, Name}, Pid),
+    ?trace({delete_global_name,{item,Name},{pid,Pid}}),
+    true = ets:delete_object(global_pid_names, {Pid, {SGroupName, Name}}),
+    true = ets:delete_object(global_pid_names, {Ref, {SGroupName, Name}}),
+    case ets:lookup(global_names_ext, {SGroupName, Name}) of
+	[{{SGroupName, Name}, Pid, RegNode}] ->
+            true = ets:delete(global_names_ext, {SGroupName, Name}),
+            ?trace({delete_global_name, {name,Name,{pid,Pid},{RegNode,Pid}}}),
 	    dounlink_ext(Pid, RegNode);
 	[] ->
-            ?trace({delete_global_name,{name,Name,{pid,Pid},{node(Pid),Pid}}}),	%NC
+            ?trace({delete_global_name,{name,Name,{pid,Pid},{node(Pid),Pid}}}),
             ok
     end,
-    trace_message(S, {del_name, node(Pid)}, [{Name, SGroupName}, Pid]).
+    trace_message(S, {del_name, node(Pid)}, [{SGroupName, Name}, Pid]).
 
 %% delete_global_name/2 is traced by the inviso application. 
 %% Do not change.
@@ -2198,6 +2222,7 @@ init_the_locker(DoTrace) ->
     erlang:error(locker_exited).
 
 loop_the_locker(S) ->
+    ?debug("loop_the_locker"),
     ?trace({loop_the_locker,S}),
     receive 
         Message when element(1, Message) =/= nodeup ->
@@ -2237,7 +2262,7 @@ loop_the_locker(S) ->
     end.
 
 the_locker_message({his_the_locker, HisTheLocker, HisKnown0, _MyKnown}, S) ->
-    ?debug(the_locker_message_his_the_locker),
+    ?debug("the_locker_message_his_the_locker"),
     ?trace({his_the_locker, HisTheLocker, {node,node(HisTheLocker)}}),
     {HisVsn, _HisKnown} = HisKnown0,
     true = HisVsn > 4,
@@ -2275,7 +2300,9 @@ the_locker_message({lock_set, _Pid, false, _}, S) ->
     ?trace({the_locker, spurious, {node,node(_Pid)}}),
     loop_the_locker(S);
 the_locker_message({lock_set, Pid, true, _HisKnown}, S) ->
+    ?debug({"the_locker_message_lock_set_Pid_S", Pid, S}),
     Node = node(Pid),
+    ?debug({"the_locker_message_Node", Node}),
     ?trace({the_locker, self(), spontaneous, {node,Node}}),
     case find_node_tag(Node, S) of
         {true, MyTag, HisVsn} ->
@@ -2287,6 +2314,7 @@ the_locker_message({lock_set, Pid, true, _HisKnown}, S) ->
                     {node,Node}, {is_lock_set,IsLockSet}}),
             case IsLockSet of
                 true ->
+		    ?debug({"the_locker_message_lock_set_IsLockSet", IsLockSet}),
                     gen_server:cast(global_name_server, 
                                     {lock_is_set, Node, MyTag, LockId}),
                     ?trace({lock_sync_done, {pid,Pid}, 
@@ -2328,6 +2356,7 @@ the_locker_message(Other, S) ->
 %% Requests from nodes on the local host are chosen before requests
 %% from other nodes. This should be a safe optimization.
 select_node(S) ->
+    ?debug({"select_node_S", S}),
     UseRemote = S#multi.local =:= [],
     Others1 = if UseRemote -> S#multi.remote; true -> S#multi.local end,
     Others2 = exclude_known(Others1, S#multi.known),
@@ -2337,9 +2366,11 @@ select_node(S) ->
          end,
     if 
         Others2 =:= [] ->
+	    ?debug({"select_node_Others2", Others2}),
             loop_the_locker(S1);
         true -> 
-            Him = random_element(Others2),
+            ?debug({"select_node_if_true"}),
+	    Him = random_element(Others2),
             #him{locker = HisTheLocker, vsn = HisVsn,
                  node = Node, my_tag = MyTag} = Him,
             HisNode = [Node],
@@ -2348,11 +2379,13 @@ select_node(S) ->
             ?trace({select_node, self(), {us, Us}}),
             %% HisNode = [Node] prevents deadlock:
             {IsLockSet, S2} = lock_nodes_safely(LockId, HisNode, S1),
+	    ?debug({"select_node_IsLockSet", IsLockSet}),
             case IsLockSet of
                 true -> 
                     Known1 = Us ++ S2#multi.known,
                     ?trace({sending_lock_set, self(), {his,HisTheLocker}}),
                     HisTheLocker ! {lock_set, self(), true, S2#multi.known},
+		    ?debug({"select_node"}),
                     S3 = lock_is_set(S2, Him, MyTag, Known1, LockId),
                     loop_the_locker(S3);
                 false ->
@@ -2368,25 +2401,31 @@ locker_lock_id(Pid, Vsn) when Vsn > 4 ->
     {?GLOBAL_RID, lists:sort([self(), Pid])}.
 
 lock_nodes_safely(LockId, Extra, S0) ->
+    ?debug({"lock_nodes_safely_S0", S0}),
     %% Locking node() could stop some node that has already locked the
     %% boss, so just check if it is possible to lock node().
     First = delete_nonode([S0#multi.the_boss]),
     case ([node()] =:= First) orelse (can_set_lock(LockId) =/= false) of
         true ->
+	    ?debug({"lock_nodes_safely1"}),
             %% Locking the boss first is an optimization.
             case set_lock(LockId, First, 0) of
                 true ->
+	    	    ?debug({"lock_nodes_safely2"}),
                     S = update_locker_known(S0),
                     %% The boss may have changed, but don't bother.
                     Second = delete_nonode([node() | Extra] -- First),
                     case set_lock(LockId, Second, 0) of
                         true ->
+	    		    ?debug({"lock_nodes_safely3"}),
                             Known = S#multi.known,
                             case set_lock(LockId, Known -- First, 0) of
                                 true ->
+	    			    ?debug({"lock_nodes_safely4"}),
                                     _ = locker_trace(S, ok, {First, Known}),
                                     {true, S};
                                 false ->
+	    			    ?debug({"lock_nodes_safely5"}),
                                     %% Since the boss is locked we
                                     %% should have gotten the lock, at
                                     %% least if no one else is locking
@@ -2399,15 +2438,18 @@ lock_nodes_safely(LockId, Extra, S0) ->
                                     {false, S}
                             end;
                         false ->
+	    		    ?debug({"lock_nodes_safely6"}),
                             del_lock(LockId, First),
                             _ = locker_trace(S, not_ok, {Second, First}),
                             {false, S}
                     end;
                 false ->
+	    	    ?debug({"lock_nodes_safely7"}),
                     _ = locker_trace(S0, not_ok, {First, []}),
                     {false, S0}
             end;
         false ->
+	    ?debug({"lock_nodes_safely8"}),
             {false, S0}
     end.
 
@@ -2453,6 +2495,8 @@ exclude_known(Others, Known) ->
     [N || N <- Others, not lists:member(N#him.node, Known)].
 
 lock_is_set(S, Him, MyTag, Known1, LockId) ->
+    ?debug({"lock_is_set_S_Him_MyTag_Known1_LockId",
+             S, Him, MyTag, Known1, LockId}),
     Node = Him#him.node,
     receive
 	{lock_set, P, true, _} when node(P) =:= Node ->
@@ -2580,6 +2624,7 @@ cancel_locker(Node, S, Tag, ToBeRunOnLockerF) ->
             ?trace({{resolver, Resolver}}),
             exit(Resolver, kill),
             S1 = trace_message(S, {kill_resolver, Node}, [Tag, Resolver]),
+	    ?debug({"cancel_locker_S1", S1}),
 	    S1#state{resolvers = lists:keydelete(Node, 1, Resolvers)};
 	_ ->
 	    S
@@ -2598,53 +2643,53 @@ reset_node_state(Node) ->
 %% Some node sent us his names. When a name clash is found, the resolve
 %% function is called from the smaller node => all resolve funcs are called
 %% from the same partition.
-exchange_names([{{Name, SGroupName}, Pid, Method} | Tail], Node, Ops, Res) ->
-    case ets:lookup(global_names, {Name, SGroupName}) of
-	[{{Name, SGroupName}, Pid, _Method, _RPid2, _Ref2}] ->
+exchange_names([{{SGroupName, Name}, Pid, Method} | Tail], Node, Ops, Res) ->
+    case ets:lookup(global_names, {SGroupName, Name}) of
+	[{{SGroupName, Name}, Pid, _Method, _RPid2, _Ref2}] ->
 	    exchange_names(Tail, Node, Ops, Res);
-	[{{Name, SGroupName}, Pid2, Method2, _RPid2, _Ref2}] when node() < Node ->
+	[{{SGroupName, Name}, Pid2, Method2, _RPid2, _Ref2}] when node() < Node ->
 	    %% Name clash!  Add the result of resolving to Res(olved).
 	    %% We know that node(Pid) =/= node(), so we don't
 	    %% need to link/unlink to Pid.
 	    Node2 = node(Pid2), %% Node2 is connected to node().
 	    case rpc:call(Node2, ?MODULE, resolve_it,
-			  [Method2, {Name, SGroupName}, Pid, Pid2]) of
+			  [Method2, {SGroupName, Name}, Pid, Pid2]) of
 		Pid ->
-		    Op = {insert, {{Name, SGroupName}, Pid, Method}},
+		    Op = {insert, {{SGroupName, Name}, Pid, Method}},
 		    exchange_names(Tail, Node, [Op | Ops], Res);
 		Pid2 ->
-		    Op = {insert, {{Name, SGroupName}, Pid2, Method2}},
+		    Op = {insert, {{SGroupName, Name}, Pid2, Method2}},
 		    exchange_names(Tail, Node, Ops, [Op | Res]);
 		none ->
-		    Op = {delete, {Name, SGroupName}},
+		    Op = {delete, {SGroupName, Name}},
 		    exchange_names(Tail, Node, [Op | Ops], [Op | Res]);
 		{badrpc, Badrpc} ->
 		    error_logger:info_msg("global: badrpc ~w received when "
 					  "conflicting name ~w was found\n",
-					  [Badrpc, Name]),     %NC?
-		    Op = {insert, {{Name, SGroupName}, Pid, Method}},
+					  [Badrpc, {SGroupName, Name}]),
+		    Op = {insert, {{SGroupName, Name}, Pid, Method}},
 		    exchange_names(Tail, Node, [Op | Ops], Res);
 		Else ->
 		    error_logger:info_msg("global: Resolve method ~w for "
 					  "conflicting name ~w returned ~w\n",
-					  [Method, Name, Else]),	%NC?
-		    Op = {delete, {Name, SGroupName}},
+					  [Method, {SGroupName, Name}, Else]),
+		    Op = {delete, {SGroupName, Name}},
 		    exchange_names(Tail, Node, [Op | Ops], [Op | Res])
 	    end;
-	[{{Name, SGroupName}, _Pid2, _Method, _RPid, _Ref}] ->
+	[{{SGroupName, Name}, _Pid2, _Method, _RPid, _Ref}] ->
 	    %% The other node will solve the conflict.
 	    exchange_names(Tail, Node, Ops, Res);
 	_ ->
 	    %% Entirely new name.
 	    exchange_names(Tail, Node,
-			   [{insert, {{Name, SGroupName}, Pid, Method}} | Ops], Res)
+			   [{insert, {{SGroupName, Name}, Pid, Method}} | Ops], Res)
     end;
 exchange_names([], _, Ops, Res) ->
     ?trace({exchange_names_finish,{ops,Ops},{res,Res}}),
     {Ops, Res}.
 
-resolve_it(Method, {Name, SGroupName}, Pid1, Pid2) ->
-    catch Method({Name, SGroupName}, Pid1, Pid2).
+resolve_it(Method, {SGroupName, Name}, Pid1, Pid2) ->
+    catch Method({SGroupName, Name}, Pid1, Pid2).
 
 minmax(P1,P2) ->
     if node(P1) < node(P2) -> {P1, P2}; true -> {P2, P1} end.
@@ -2723,19 +2768,25 @@ rpid_is_locking(Ref, PidRefs) ->
     lists:keyfind(Ref, 3, PidRefs) =/= false.
 
 handle_nodedown(Node, S) ->
+    ?debug("handle_nodedown"),
     %% DOWN signals from monitors have removed locks and registered names.
     #state{known = Known, synced = Syncs} = S,
     NewS = cancel_locker(Node, S, get({sync_tag_my, Node})),
     NewS#state.the_locker ! {remove_from_known, Node},
     reset_node_state(Node),
-    NewS#state{known = [{G, lists:delete(Node, N)}||{G, N}<-Known, N/=[Node]],
-               synced = [{G, lists:delete(Node, N)}||{G, N}<-Syncs, N/=[Node]]}.
-
+    case application:get_env(kernel, s_groups) of
+        undefined ->
+	    NewS#state{known = [{G, lists:delete(Node, N)}||{G, N}<-Known, N/=[Node]],
+                       synced = [{G, lists:delete(Node, N)}||{G, N}<-Syncs, N/=[Node]]};
+	_ ->
+	    NewS#state{known = [{G, lists:delete(Node, N)} || {G, N} <- Known],
+                       synced = [{G, lists:delete(Node, N)} || {G, N} <- Syncs]}
+    end.
 
 get_names() ->
     ets:select(global_names, 
-               ets:fun2ms(fun({{Name, SGroupName}, Pid, Method, _RPid, _Ref}) -> 
-                                  {{Name, SGroupName}, Pid, Method} 
+               ets:fun2ms(fun({{SGroupName, Name}, Pid, Method, _RPid, _Ref}) -> 
+                                  {{SGroupName, Name}, Pid, Method} 
                           end)).
 
 get_names_ext() ->
@@ -2746,6 +2797,9 @@ get_known() ->
 
 get_known_s_group(SGroupName) ->
     gen_server:call(global_name_server, {get_known_s_group, SGroupName}, infinity).
+
+own_s_groups() ->
+    gen_server:call(global_name_server, own_s_groups, infinity).
 
 random_sleep(Times) ->
     case (Times rem 10) of
@@ -2793,7 +2847,7 @@ trace_message(M, X) ->
 %%-----------------------------------------------------------------
 %% Each sync process corresponds to one call to sync. Each such
 %% process asks the global_name_server on all Nodes if it is in sync
-%% with Nodes. If not, that (other) node spawns a syncer process that
+%% with Nodes. If not, then (other) node spawns a syncer process that
 %% waits for global to get in sync with all Nodes. When it is in
 %% sync, the syncer process tells the original sync process about it.
 %%-----------------------------------------------------------------
@@ -2817,15 +2871,15 @@ sync_loop(Nodes, From) ->
     end.
 
 %%%=======================================================================
-%%% Get the current global_groups definition
+%%% Get the current group definition
 %%%=======================================================================
 check_sync_nodes() ->
     case get_own_nodes() of
 	{ok, all} ->
 	    nodes();
 	{ok, NodesNG} ->
-	    %% global_groups parameter is defined, we are not allowed to sync
-	    %% with nodes not in our own global group.
+	    %% s_group parameter is defined, we are not allowed to sync
+	    %% with nodes not in our own group.
             intersection(nodes(), NodesNG);
 	{error, _} = Error ->
 	    Error
@@ -2836,8 +2890,8 @@ check_sync_nodes(SyncNodes) ->
 	{ok, all} ->
 	    SyncNodes;
 	{ok, NodesNG} ->
-	    %% global_groups parameter is defined, we are not allowed to sync
-	    %% with nodes not in our own global group.
+	    %% s_group parameter is defined, we are not allowed to sync
+	    %% with nodes not in our own group.
 	    OwnNodeGroup = intersection(nodes(), NodesNG),
 	    IllegalSyncNodes = (SyncNodes -- [node() | OwnNodeGroup]),
 	    case IllegalSyncNodes of
@@ -2852,7 +2906,7 @@ check_sync_nodes(SyncNodes) ->
 get_own_nodes() ->
     case s_group:get_own_nodes_with_errors() of
         {error, Error} ->
-            {error, {"global_groups definition error", Error}};
+            {error, {"s_group definition error", Error}};
         OkTup ->
             OkTup
     end.
@@ -2873,8 +2927,6 @@ loop_the_registrar() ->
         {trans_s_group, Fun, SGroupName, From} ->
             ?trace({loop_the_registrar, self(), Fun, SGroupName, From}),
             gen_server:reply(From, trans_s_group(Fun, SGroupName));
-	    %%DopRes = trans_s_group(Fun, SGroupName),
-	    %%gen_server:reply(From, DopRes);
 	Other ->
             unexpected_message(Other, register)
     end,
@@ -2888,8 +2940,10 @@ unexpected_message(Message, What) ->
                              "received an unexpected message:\n~p\n", 
                              [What, Message]).
 
-%%% Utilities
 
+%%%=======================================================================
+%%% Utilities
+%%%=======================================================================
 %% When/if erlang:monitor() returns before trying to connect to the
 %% other node this function can be removed.
 do_monitor(Pid) ->
@@ -2917,40 +2971,41 @@ intersection(L1, L2) ->
 %% Additional functions
 %%%------------------------------------------------------------------
 unregister_foreign_names(S) ->
-    ?debug({"S", S}),
+    ?debug({"unregister_foreign_names_S", S}),
     AllNames = registered_names(all_names),
     ?debug({"unregister_foreign_names_AllNames", AllNames}),
-    {OwnGrps, _OwnNodes} = lists:unzip(S#state.known),
-    ?debug({"OwnGrps", OwnGrps}),
-    NewS = unregister_foreign_names(AllNames, OwnGrps, S),
-    NewAllNames = registered_names(all_names),
-    ?debug({"NewAllNames", NewAllNames}),
-    NewS.
+    OwnGroups = case S#state.own_s_groups of
+                    [] -> [no_group];
+		    _ -> [G || {G, _Ns} <- S#state.own_s_groups]
+                end,
+    ?debug({"unregister_foreign_names_OwnGroups", OwnGroups}),
+    unregister_foreign_names(AllNames, OwnGroups, S).
 
-unregister_foreign_names([], _Groups, S) ->
-    ?debug({"unr_[]"}),
+unregister_foreign_names([], _, S) ->
+    %%NewAllNames = registered_names(all_names),
+    %%?debug({"unregister_foreign_names_NewAllNames", NewAllNames}),
     S;
-unregister_foreign_names([{_Name, SGroupName} | RemNames],
+unregister_foreign_names([{SGroupName, _Name} | RemNames],
                          [no_group], S) when SGroupName=='undefined' ->
     ?debug({"unr_no_group_undef", SGroupName}),
     unregister_foreign_names(RemNames, [no_group], S);
-unregister_foreign_names([{Name, SGroupName} | RemNames], [no_group], S) ->
-    ?debug({"del_unr_no_group_all", Name, SGroupName}),
-    S1 = delete_global_name2(Name, SGroupName, S),
+unregister_foreign_names([{SGroupName, Name} | RemNames], [no_group], S) ->
+    ?debug({"del_unr_no_group_all", SGroupName, Name}),
+    S1 = delete_global_name2(SGroupName, Name, S),
     unregister_foreign_names(RemNames, [no_group], S1);
-unregister_foreign_names([{Name, SGroupName} | RemNames], Groups, S)
+unregister_foreign_names([{SGroupName, Name} | RemNames], Groups, S)
                                         when SGroupName=='undefined' ->
-    S1 = delete_global_name2(Name, SGroupName, S),
-    ?debug({"del_unr_all_undef", Name, SGroupName}),
+    S1 = delete_global_name2(SGroupName, Name, S),
+    ?debug({"del_unr_all_undef", SGroupName, Name}),
     unregister_foreign_names(RemNames, Groups, S1);
-unregister_foreign_names([{Name, SGroupName} | RemNames], Groups, S) ->
+unregister_foreign_names([{SGroupName, Name} | RemNames], Groups, S) ->
     case lists:member(SGroupName, Groups) of
         true ->
-    	      ?debug({"unr_all_all", Name, SGroupName}),
+    	      ?debug({"unr_all_all", SGroupName, Name}),
               unregister_foreign_names(RemNames, Groups, S);
 	_ ->
-              S1 = delete_global_name2(Name, SGroupName, S),
-	      ?debug({"del_unr_all_all", Name, SGroupName}),
+              S1 = delete_global_name2(SGroupName, Name, S),
+	      ?debug({"del_unr_all_all", SGroupName, Name}),
 	      unregister_foreign_names(RemNames, Groups, S1)
     end.
 
@@ -2965,7 +3020,9 @@ resolver_s(CmnSGroups, Node, Tag) ->
             ?debug({"resolver_s_receive_NameList_Node", NameList, Node}),
 	    ?trace({resolver, {me,self()}, {node,Node}, {namelist,NameList}}),
             {Ops, Resolved} = exchange_names(NameList, Node, [], []),
-            Exchange = {exchange_ops_s, CmnSGroups, Node, Tag, Ops, Resolved},
+	    ?debug({"resolver_s_CmnSGroups_Node_Ops_Resolved",
+    	                        CmnSGroups, Node, Ops, Resolved}),
+            Exchange = {exchange_ops_s, Node, CmnSGroups, Tag, Ops, Resolved},
             gen_server:cast(global_name_server, Exchange),
             exit(normal);
         _ -> % Ignore garbage.
@@ -2984,26 +3041,50 @@ exchange_ops_s_known([SGroup | SGroups], Known, S) ->
     exchange_ops_s_known(SGroups, [{SGroup, NewKnown} | Known], S).
 
 
-resolved_s(CmnSGroups, Node, HisResolved, HisCmnKnown, Names_ext, S0) ->
-    %% NC changed Group->CmnSGroups, Known->CmnKnownNodes, HisKnown->HisCmnKnownNodes,
+resolved_s(Node, HisCmnSGroups, HisCmnKnown, HisResolved, Names_ext, S0) ->
+    %% NC changed Group->HisCmnSGroups,
+    %% Known->CmnKnownNodes, HisKnown->HisCmnKnownNodes,
     %% CmnKnown::[{SGroupName, Nodes}], HisCmnKnown::[{SGroupName, Nodes}].
     %% Resolved and HisResolved are lists of names
+    ?debug({"resolved_s_HisCmnSGroups_Node_HisResolved_HisCmnKnown_Names_ext",
+                        HisCmnSGroups, Node, HisResolved, HisCmnKnown, Names_ext}),
+    ?debug({"resolved_s_S0", S0}),
 
     Ops = erase({save_ops, Node}) ++ HisResolved,
+    ?debug({"resolved_s_Ops", Ops}),
 
     %% CmnKnownNodes may have shrunk since the lock was taken (due to nodedowns).
-    CmnKnown = exchange_ops_s_known(CmnSGroups, [], S0),
+    CmnKnown = exchange_ops_s_known(HisCmnSGroups, [], S0),
     {_SGroups, CmnKnownNodes1} = lists:unzip(CmnKnown),
     CmnKnownNodes = lists:usort(lists:append(CmnKnownNodes1)),
-    {_SGroups, HisCmnKnownNodes1} = lists:unzip(HisCmnKnown),
-    HisCmnKnownNodes = lists:usort(lists:append(HisCmnKnownNodes1)),
+    HisCmnKnownNodes =
+           case HisCmnKnown of
+               [] ->
+	          [];
+	       _ ->
+	          {_SGroups, HisCmnKnownNodes1} = lists:unzip(HisCmnKnown),
+    		  lists:usort(lists:append(HisCmnKnownNodes1))
+           end,
 
     NewNodes = [Node | HisCmnKnownNodes],
-    sync_others_s(HisCmnKnown),
+
+    %% CmbNodeSGroups::[{Node, SGroups}]
+    %% Transform HisCmnKnown into [{Node1, SGroups1}]. Then transform
+    %% s_group:own_s_groups() into [{Node2, SGroups2}]
+    %% When Node1==Node2 SGroups3 = lists:usort(SGroups1++SGroups2)
+    HisCmnNodeSGroups = s_group:ng_pairs(HisCmnKnown),
+    OwnSGroupNodes = S0#state.own_s_groups,
+    OwnNodeSGroups = s_group:ng_pairs(OwnSGroupNodes),
+    CmbNodeSGroups = [{Nd1, lists:usort(SGr1++SGr2)} ||
+		      {Nd2, SGr2} <- OwnNodeSGroups,
+                      {Nd1, SGr1} <- HisCmnNodeSGroups, Nd1=:=Nd2],
+
+    sync_others_s(CmbNodeSGroups),
     ExtraInfo = [{vsn, get({prot_vsn, Node})}, {lock, get({lock_id, Node})}],
     S = do_ops(Ops, node(), Names_ext, ExtraInfo, S0),
 
     %% node() is synced with Node, but not with HisCmnKnownNodes yet
+    ?debug({"resolved_s_S#state.syncers", S#state.syncers}),
     lists:foreach(fun(Pid) -> Pid ! {synced, [Node]} end, S#state.syncers),
     S3 = lists:foldl(fun(Node1, S1) -> 
                              F = fun(Tag) -> cancel_locker(Node1, S1, Tag) end,
@@ -3014,9 +3095,8 @@ resolved_s(CmnSGroups, Node, HisResolved, HisCmnKnown, Names_ext, S0) ->
     %% {del_lock, ...} is received after {new_nodes, ...} 
     %% (except when abcast spawns process(es)...).
     %% CmnNodeSGroups::[{Node, [SGroupName]}]
-    CmnNodeSGroups = s_group:ng_pairs(HisCmnKnown),
     NewNodesF = fun() ->
-                         new_nodes_f(CmnNodeSGroups, HisCmnKnown, Ops,
+                         new_nodes_f(CmbNodeSGroups, HisCmnKnown, Ops,
                                      Names_ext, ExtraInfo, [])
                 end,
     ?debug({"resolved_s_NewNodesF", NewNodesF}),
@@ -3033,18 +3113,23 @@ resolved_s(CmnSGroups, Node, HisResolved, HisCmnKnown, Names_ext, S0) ->
     NewS = trace_message(S4, {added, AddedNodes}, 
                          [{new_nodes, NewNodes}, {abcast, CmnKnownNodes}, {ops,Ops}]),
     ?debug({"resolved_s_NewS", NewS}),
-    new_known_synced(CmnSGroups, Node, CmnKnown, HisCmnKnown, NewS).
 
+    ?debug({"resolved_s_Node", Node}),
+    ?debug({"resolved_s_OwnNodeSGroups", OwnNodeSGroups}),
+    ?debug({"resolved_s_HisCmnSGroups", HisCmnSGroups}),
+    NewS1 = new_known_synced(HisCmnSGroups, Node, CmnKnown, HisCmnKnown, NewS),
+    known_synced_other_groups(HisCmnNodeSGroups, OwnNodeSGroups, NewS1).
 
-sync_others_s(HisCmnKnown) ->
-    %% HisCmnKnown::[{SGroupName, [Node]}], CmnNodeSGroups::[{Node, [SGroupName]}]
+sync_others_s(CmnNodeSGroups) ->
+    %% CmnNodeSGroups::[{Node, [SGroupName]}]
+    ?debug({"sync_others_s_CmnNodeSGroups", CmnNodeSGroups}),
     N = case application:get_env(kernel, ?N_CONNECT_RETRIES) of
             {ok, NRetries} when is_integer(NRetries), 
                                 NRetries >= 0 -> NRetries;
             _ -> ?DEFAULT_N_CONNECT_RETRIES
         end,
-    CmnNodeSGroups = s_group:ng_pairs(HisCmnKnown),
     {CmnNodes, _SGroups} = lists:unzip(CmnNodeSGroups),
+    ?debug({"sync_others_s_CmnNodes", CmnNodes}),
     lists:foreach(fun(Node) -> 
     			  {Node, CmnSGroups} = lists:keyfind(Node, 1, CmnNodeSGroups),
                           spawn(fun() -> sync_other_s(CmnSGroups, Node, N) end)
@@ -3072,16 +3157,24 @@ check_in_sync(Node, [SGroup | SGroups], Synced) ->
     NSynced = case lists:keyfind(SGroup, 1, Synced) of 
                   false -> 
                         [{SGroup, [Node]} | Synced];
-                  {SGroup, Ss}->
-                        lists:keyreplace(SGroup, 1, Synced, {SGroup, [Node | Ss]})
+                  {SGroup, Ss} ->
+                        case lists:member(Node, Ss) of
+			    true -> 
+			        Synced;
+			    false ->
+			        lists:keyreplace(SGroup, 1, Synced,
+				      {SGroup, lists:usort([Node | Ss])})
+			end
               end,
     check_in_sync(Node, SGroups, NSynced).
 
 
 new_nodes_f([], _, _, _, _, NewNodesF) ->
+    ?debug("new_nodes_f2"),
     NewNodesF;
 new_nodes_f([{Node, CSGroups} | NodeSGroups], HisCmnKnown, Ops,
                             Names_ext, ExtraInfo, NewNodesF) ->
+    ?debug("new_nodes_f1"),
     CSGroupNodes = [{Group, Nodes} ||
                     {Group, Nodes} <- HisCmnKnown, G <- CSGroups, G==Group],
     NewNodeF = gen_server:cast({global_name_server, Node},
@@ -3091,33 +3184,26 @@ new_nodes_f([{Node, CSGroups} | NodeSGroups], HisCmnKnown, Ops,
                 Names_ext, ExtraInfo, [NewNodeF | NewNodesF]).
 
 
-new_nodes1([], _, _, _, _, _, S) ->
-    S;
-new_nodes1([Group | CSGroups], CSGroupNodes, Ops, Node, Names_ext, ExtraInfo, S) ->
-    Nodes1 = lists:append([Nodes || {G, Nodes} <- CSGroupNodes, G==Group]),
-    NewNodes = [Node | Nodes1],
-    %% NC Check that there is no overlapping between two consequetive requests
-    S1 = new_nodes_s(Ops, Group, Node, Names_ext, NewNodes, ExtraInfo, S),
-    ?debug({"new_nodes1_Nodes1", Nodes1}),
-    ?debug({"new_nodes1_Group", Group}),
-    ?debug({"new_nodes1_CSGroups", CSGroups}),
-    ?debug({"new_nodes1_S1", S1}),
-    new_nodes1(CSGroups, CSGroupNodes, Ops, Node, Names_ext, ExtraInfo, S1).
-
-
 new_known_synced([], _, _, _, S) ->
-    ?debug({"new_known_synced_S", S}),
+    ?debug({"new_known_synced_Sa", S}),
     S;
 new_known_synced([Group | CmnSGroups], Node, CmnKnown, HisCmnKnown, S) ->
-    OwnNodes = lists:append([NodesOwn ||
-               {GroupOwn, NodesOwn} <- CmnKnown, GroupOwn==Group]),
+    ?debug({"new_known_synced_S", S}),
+
+    OwnNodes = case lists:keyfind(Group, 1, CmnKnown) of
+                   false -> [];
+		   {Group, OwnNodes0} -> OwnNodes0
+               end,
     ?debug({"new_known_synced_OwnNodes", OwnNodes}),
-    HisNodes = lists:append([NodesHis ||
-               {GroupHis, NodesHis} <- HisCmnKnown, GroupHis==Group]),
+
+    HisNodes = case lists:keyfind(Group, 1, HisCmnKnown) of
+                   false -> [];
+		   {Group, HisNodes0} -> HisNodes0
+               end,
     ?debug({"new_known_synced_HisNodes", HisNodes}),
 
     NewNodes = [Node | HisNodes],
-    NewNodes0 = OwnNodes ++ (NewNodes -- OwnNodes),
+    NewNodes0 = lists:usort(OwnNodes ++ (NewNodes -- OwnNodes)),
     ?debug({"new_known_synced_NewNodes0", NewNodes0}),
 
     NewKnown = case lists:keyfind(Group, 1, S#state.known) of 
@@ -3131,11 +3217,117 @@ new_known_synced([Group | CmnSGroups], Node, CmnKnown, HisCmnKnown, S) ->
                         [{Group, [Node]} | S#state.synced];
                     {Group, Ss}->
                         lists:keyreplace(Group, 1, S#state.synced,
-			                 {Group, [Node | Ss]})
+    			                 {Group, lists:usort([Node | Ss])})
                 end,
     ?debug({"new_known_synced_NewSynced", NewSynced}),
-    NewS = S#state{known = NewKnown, 
+    NewS = S#state{known = NewKnown,
                    synced = NewSynced},
     ?debug({"new_known_synced_NewS", NewS}),
     new_known_synced(CmnSGroups, Node, CmnKnown, HisCmnKnown, NewS).
+
+
+known_synced_other_groups([], _, S) ->
+    ?debug({"new_known_synced1_Sa", S}),
+    S;
+known_synced_other_groups([{Node, HisCmnSGroups}|HisCmnNodeSGroups], 
+                                                 OwnNodeSGroups, S) ->
+    ?debug({"new_known_synced1_S", S}),
+
+    OwnSGroups = case lists:keyfind(Node, 1, OwnNodeSGroups) of
+                      false -> [];
+		      {Node, OwnSGroups0} -> OwnSGroups0
+                 end,
+    CmnSGroups = lists:usort(OwnSGroups--HisCmnSGroups),
+    Known = S#state.known,
+    Synced = S#state.synced,
+    {NewKnown, NewSynced} = add_node_known_synced(CmnSGroups, Node,
+                                                  Known, Synced),
+    ?debug({"new_known_synced1_NewKnown", NewKnown}),
+    ?debug({"new_known_synced1_NewSynced", NewSynced}),
+    NewS = S#state{known = NewKnown,
+                   synced = NewSynced},
+    ?debug({"new_known_synced1_NewS", NewS}),
+    known_synced_other_groups(HisCmnNodeSGroups, OwnNodeSGroups, NewS).
+
+add_node_known_synced([], _Node, Known, Synced) ->
+    {Known, Synced};
+add_node_known_synced([Group | SGroups], Node, Known, Synced) ->
+    NewKnown = case lists:keyfind(Group, 1, Known) of
+                   false ->
+		        [{Group, [Node]} | Known];
+		   {Group, KNodes} ->
+		        lists:keyreplace(Group, 1, Known,
+			                 {Group, lists:usort([Node|KNodes])})
+               end,
+    NewSynced = case lists:keyfind(Group, 1, Synced) of
+                   false ->
+		        [{Group, [Node]} | Synced];
+		   {Group, SNodes} ->
+		        lists:keyreplace(Group, 1, Synced,
+			                 {Group, lists:usort([Node|SNodes])})
+               end,
+    add_node_known_synced(SGroups, Node, NewKnown, NewSynced).
+
+%% Combine information from SGroups and SGroupNodes, and add Node
+%% to the SGroups
+combine_known(Node, SGroups, SGroupNodes) ->
+    combine_known(Node, SGroups, SGroupNodes, []).
+
+combine_known(_, [], _, CmbSGroupNodes) ->
+    CmbSGroupNodes;
+combine_known(Node, [Group | SGroups], SGroupNodes, CmbSGroupNodes) ->
+    NewNodes = case lists:keyfind(Group, 1, SGroupNodes) of
+                   false ->
+		        [Node];
+		   {Group, Nodes} ->
+		        lists:usort([Node | Nodes])
+               end,
+    NewCmbSGroupNodes = [{Group, NewNodes} | CmbSGroupNodes],
+    combine_known(Node, SGroups, SGroupNodes, NewCmbSGroupNodes).
+
+
+added_s_group_nodes(CmbSGroupNodes, Known) ->
+    added_s_group_nodes(CmbSGroupNodes, Known, []).
+
+added_s_group_nodes([], _, AddedSGroupNodes) ->
+    AddedSGroupNodes;
+added_s_group_nodes([{SGroup, Nodes}|CmbSGroupNodes],
+		                     Known, AddedSGroupNodes) ->
+    KnownNodes = case lists:keyfind(SGroup, 1, Known) of
+                     false ->
+		          [];
+		     {SGroup, KNodes} ->
+		          KNodes
+                 end,
+    AddedNodes = lists:usort(lists:delete(node(), Nodes--KnownNodes)),
+    NewAddedSGroupNodes = case AddedNodes of
+                              [] ->
+			         AddedSGroupNodes;
+			      _ ->
+			         [{SGroup, AddedNodes}|AddedSGroupNodes]
+                          end,
+    added_s_group_nodes(CmbSGroupNodes, Known, NewAddedSGroupNodes).
+
+
+new_known([], Known, _) ->
+    Known;
+new_known([Group|SGroups], Known, AddedSGroupNodes) ->
+    AddedNodes = case lists:keyfind(Group, 1, AddedSGroupNodes) of
+                     false -> [];
+		     {Group, Ns} -> Ns
+                 end,
+    NewKnown = case lists:keyfind(Group, 1, Known) of 
+                   false ->
+		       [{Group, lists:usort(AddedNodes)} | Known];
+                   {Group, Ns1}-> 
+                       lists:keyreplace(Group, 1, Known, 
+                                        {Group, lists:usort(Ns1++AddedNodes)})
+               end,
+    ?debug({"new_nodes_s_NewKnown", NewKnown}),
+    new_known(SGroups, NewKnown, AddedSGroupNodes).
+
+
+
+
+
 

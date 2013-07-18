@@ -50,7 +50,7 @@ stop(_State) ->
 %%-------------------------------------------------------------------
 config_change(Changed, New, Removed) ->
     do_distribution_change(Changed, New, Removed),
-    do_s_groups_change(Changed, New, Removed),
+    do_global_groups_change(Changed, New, Removed),
     ok.
 
 get_error_logger_type() ->
@@ -267,10 +267,10 @@ is_dist_changed(Changed, New, Removed) ->
     {C, N, R}.
 
 %%-----------------------------------------------------------------
-%% The change of the s_group parameters is taken care of here
+%% The change of the global_groups parameter is taken care of here
 %%-----------------------------------------------------------------
-do_s_groups_change(Changed, New, Removed) ->
-    %% check if the s_groups parameter is changed.
+do_global_groups_change(Changed, New, Removed) ->
+    %% check if the global_groups parameter is changed.
     case is_gg_changed(Changed, New, Removed) of
 	%%{changed, new, removed}
 	{false, false, false} ->
@@ -285,7 +285,7 @@ do_s_groups_change(Changed, New, Removed) ->
     end.
 
 %%-----------------------------------------------------------------
-%% Check if s_groups are changed in someway.
+%% Check if global_groups is changed in someway.
 %%-----------------------------------------------------------------
 is_gg_changed(Changed, New, Removed) ->
     C = case lists:keyfind(s_groups, 1, Changed) of
