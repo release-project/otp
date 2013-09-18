@@ -54,6 +54,7 @@
 	 file_server_2,
 	 fixtable_server,
 	 global_group,
+	 s_group,
 	 global_name_server,
 	 heart,
 	 inet_gethost_native,
