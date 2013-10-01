@@ -302,7 +302,7 @@ provider erlang {
      * Fired when a process is scheduled.
      *
      * @param p the PID (string form) of the newly scheduled process
-     * @param mfa the m:f/a of the function it should run next
+     * @param mfa the m:f/a of the function the process will run in
      * @param ts timestamp
      */
     probe process__scheduled(char *p, char *mfa, uint64_t ts);
@@ -329,7 +329,7 @@ provider erlang {
      * Fired when a process is unblocked after a port has been unblocked.
      *
      * @param p the PID (string form) of the process that has been
-     * unscheduled.
+     * unscheduled
      * @param port the port that is no longer busy (i.e., is now unblocked)
      */
     probe process__port_unblocked(char *p, char *port);
@@ -405,6 +405,26 @@ provider erlang {
      * @param ts timestamp
      */
     probe process__unregistered(char *p, char *name, uint64_t ts);
+
+    /**
+     * Fired when a process becomes active (i.e. is removed from a run queue 
+     * and is scheduled to run).
+     *
+     * @param p the PID (string form) of the active process
+     * @param mfa the m:f/a of the function the process will run in
+     * @param ts timestamp
+     */
+    probe process__active(char *p, char *mfa, uint64_t ts);
+
+    /**
+     * Fired when a process becomes inactive (i.e. is put back into a run 
+     * queue, but not after being preemptively scheduled out).
+     *
+     * @param p the PID (string form) of the inactive process
+     * @param mfa the m:f/a of the function the process was running
+     * @param ts timestamp
+     */
+    probe process__inactive(char *p, char *mfa, uint64_t ts);
 
     /* network distribution */
 

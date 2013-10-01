@@ -4884,8 +4884,30 @@ schedule_out_process(ErtsRunQueue *c_rq, erts_aint32_t state, Process *p)
     }
 
     if (!(n & ERTS_PSFLG_IN_RUNQ)) {
+
 	if (erts_system_profile_flags.runnable_procs)
 	    profile_runnable_proc(p, am_inactive);
+
+#ifdef USE_VM_PROBES
+        if (DTRACE_ENABLED(process_inactive)) {
+            DTRACE_CHARBUF(process_name, DTRACE_TERM_BUF_SIZE);
+            DTRACE_CHARBUF(mfa, DTRACE_TERM_BUF_SIZE);
+            dtrace_proc_str(p, process_name);
+            if (ERTS_PROC_IS_EXITING(p)) {
+                strcpy(mfa, "<exiting>");
+            } else {
+                BeamInstr *fptr = find_function_from_pc(p->i);
+                if (fptr) {
+                    dtrace_fun_decode(p, (Eterm)fptr[0],
+                                      (Eterm)fptr[1], (Uint)fptr[2],
+                                      NULL, mfa);
+                } else {
+                    erts_snprintf(mfa, sizeof(mfa), "0");
+                }
+            }
+            DTRACE3(process_inactive, process_name, mfa, dtrace_ts());
+        }
+#endif
     }
     else {
 	int prio = (int) (ERTS_PSFLG_PRIO_MASK & n);
@@ -4972,6 +4994,28 @@ schedule_process(Process *p, erts_aint32_t state, int active_enq)
     	profile_runnable_proc(p, am_active);
     }
 
+#ifdef USE_VM_PROBES
+    if (DTRACE_ENABLED(process_active)
+        && !(a & (ERTS_PSFLG_ACTIVE|ERTS_PSFLG_SUSPENDED))) {
+        DTRACE_CHARBUF(process_name, DTRACE_TERM_BUF_SIZE);
+        DTRACE_CHARBUF(mfa, DTRACE_TERM_BUF_SIZE);
+        dtrace_proc_str(p, process_name);
+        if (ERTS_PROC_IS_EXITING(p)) {
+            strcpy(mfa, "<exiting>");
+        } else {
+            BeamInstr *fptr = find_function_from_pc(p->i);
+            if (fptr) {
+                dtrace_fun_decode(p, (Eterm)fptr[0],
+                                  (Eterm)fptr[1], (Uint)fptr[2],
+                                  NULL, mfa);
+            } else {
+                erts_snprintf(mfa, sizeof(mfa), "0");
+            }
+        }
+        DTRACE3(process_active, process_name, mfa, dtrace_ts());
+    }
+#endif
+
     if ((n & ERTS_PSFLG_IN_RUNQ) && !(a & ERTS_PSFLG_IN_RUNQ))
 	add2runq(p, n);
 }
@@ -5024,6 +5068,29 @@ suspend_process(Process *c_p, Process *p)
 	    && (state & ERTS_PSFLG_ACTIVE)) {
 	    profile_runnable_proc(p, am_inactive);
 	}
+
+#ifdef USE_VM_PROBES
+        if (DTRACE_ENABLED(process_inactive)
+            && (p->rcount == 0)
+            && (state & ERTS_PSFLG_ACTIVE)) {
+            DTRACE_CHARBUF(process_name, DTRACE_TERM_BUF_SIZE);
+            DTRACE_CHARBUF(mfa, DTRACE_TERM_BUF_SIZE);
+            dtrace_proc_str(p, process_name);
+            if (ERTS_PROC_IS_EXITING(p)) {
+                strcpy(mfa, "<exiting>");
+            } else {
+                BeamInstr *fptr = find_function_from_pc(p->i);
+                if (fptr) {
+                    dtrace_fun_decode(p, (Eterm)fptr[0],
+                                      (Eterm)fptr[1], (Uint)fptr[2],
+                                      NULL, mfa);
+                } else {
+                    erts_snprintf(mfa, sizeof(mfa), "0");
+                }
+            }  
+            DTRACE3(process_inactive, process_name, mfa, dtrace_ts());
+        }
+#endif
 
 	p->rcount++;  /* count number of suspend */
     }
@@ -8138,6 +8205,28 @@ set_proc_exiting(Process *p,
 	&& !(state & (ERTS_PSFLG_ACTIVE|ERTS_PSFLG_SUSPENDED))) {
     	profile_runnable_proc(p, am_active);
     }
+
+#ifdef USE_VM_PROBES
+    if (DTRACE_ENABLED(process_active)
+        && !(state & (ERTS_PSFLG_ACTIVE|ERTS_PSFLG_SUSPENDED))) {
+        DTRACE_CHARBUF(process_name, DTRACE_TERM_BUF_SIZE);
+        DTRACE_CHARBUF(mfa, DTRACE_TERM_BUF_SIZE);
+        dtrace_proc_str(p, process_name);
+        if (ERTS_PROC_IS_EXITING(p)) {
+            strcpy(mfa, "<exiting>");
+        } else {
+            BeamInstr *fptr = find_function_from_pc(p->i);
+            if (fptr) {
+                dtrace_fun_decode(p, (Eterm)fptr[0],
+                                  (Eterm)fptr[1], (Uint)fptr[2],
+                                  NULL, mfa);
+            } else {
+                erts_snprintf(mfa, sizeof(mfa), "0");
+            }
+        }
+        DTRACE3(process_active, process_name, mfa, dtrace_ts());
+    }
+#endif
 
     if (!(state & (ERTS_PSFLG_IN_RUNQ|ERTS_PSFLG_RUNNING)))
 	add2runq(p, state);
