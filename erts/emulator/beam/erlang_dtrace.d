@@ -426,6 +426,24 @@ provider erlang {
      */
     probe process__inactive(char *p, char *mfa, uint64_t ts);
 
+    /**
+     * Fired when a synchronous call that a process made to a port returns.
+     *
+     * @param p the PID (string form) of the active process
+     * @param mfa the m:f/a of the function the process will run in
+     * @param ts timestamp
+     */
+    probe process__exclusive_active(char *p, char *mfa, uint64_t ts);
+
+    /**
+     * Fired when a process makes a synchronous call to a port.
+     *
+     * @param p the PID (string form) of the inactive process
+     * @param mfa the m:f/a of the function the process was running
+     * @param ts timestamp
+     */
+    probe process__exclusive_inactive(char *p, char *mfa, uint64_t ts);
+
     /* network distribution */
 
     /**

@@ -1257,7 +1257,26 @@ try_imm_drv_call(ErtsTryImmDrvCallState *sp)
 	if (erts_system_profile_flags.runnable_procs
 	    && erts_system_profile_flags.exclusive)
 	    profile_runnable_proc(c_p, am_inactive);
-
+#ifdef USE_VM_PROBES
+        if (DTRACE_ENABLED(process_exclusive_inactive)) {
+            DTRACE_CHARBUF(process_name, DTRACE_TERM_BUF_SIZE);
+            DTRACE_CHARBUF(mfa, DTRACE_TERM_BUF_SIZE);
+            dtrace_proc_str(c_p, process_name);
+            if (ERTS_PROC_IS_EXITING(c_p)) {
+                strcpy(mfa, "<exiting>");
+            } else {
+                BeamInstr *fptr = find_function_from_pc(c_p->i);
+                if (fptr) {
+                    dtrace_fun_decode(c_p, (Eterm)fptr[0],
+                                      (Eterm)fptr[1], (Uint)fptr[2],
+                                      NULL, mfa);
+                } else {
+                    erts_snprintf(mfa, sizeof(mfa), "0");
+                }
+            }
+            DTRACE3(process_exclusive_inactive, process_name, mfa, dtrace_ts());
+        }
+#endif
 	reds_left_in = ERTS_BIF_REDS_LEFT(c_p);
 	erts_smp_proc_unlock(c_p, ERTS_PROC_LOCK_MAIN);
     }
@@ -1317,6 +1336,27 @@ finalize_imm_drv_call(ErtsTryImmDrvCallState *sp)
 	if (erts_system_profile_flags.runnable_procs
 	    && erts_system_profile_flags.exclusive)
 	    profile_runnable_proc(c_p, am_active);
+
+#ifdef USE_VM_PROBES
+        if (DTRACE_ENABLED(process_exclusive_active)) {
+            DTRACE_CHARBUF(process_name, DTRACE_TERM_BUF_SIZE);
+            DTRACE_CHARBUF(mfa, DTRACE_TERM_BUF_SIZE);
+            dtrace_proc_str(c_p, process_name);
+            if (ERTS_PROC_IS_EXITING(c_p)) {
+                strcpy(mfa, "<exiting>");
+            } else {
+                BeamInstr *fptr = find_function_from_pc(c_p->i);
+                if (fptr) {
+                    dtrace_fun_decode(c_p, (Eterm)fptr[0],
+                                      (Eterm)fptr[1], (Uint)fptr[2],
+                                      NULL, mfa);
+                } else {
+                    erts_snprintf(mfa, sizeof(mfa), "0");
+                }
+            }
+            DTRACE3(process_exclusive_active, process_name, mfa, dtrace_ts());
+        }
+#endif
     }
 }
 
