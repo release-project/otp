@@ -1285,6 +1285,26 @@ dtrace_fun_decode(Process *process,
     erts_snprintf(mfa_buf, DTRACE_TERM_BUF_SIZE, "%T:%T/%d",
                   module, function, arity);
 }
+
+ERTS_GLB_INLINE Uint64
+dtrace_ts(void)
+{
+
+    Uint64 res;
+    Uint m, s, u;
+
+#ifdef HAVE_ERTS_NOW_CPU
+    erts_get_now_cpu(&m, &s, &u);
+#else
+    get_now(&m, &s, &u);
+#endif
+
+    res = u;
+    res += 1000000 * s;
+    res += (Uint64) 1000000 * (Uint64) 1000000 * (Uint64) m;
+
+    return res;
+}
 #endif /* #if ERTS_GLB_INLINE_INCL_FUNC_DEF */
 
 #endif /* !__GLOBAL_H__ */
