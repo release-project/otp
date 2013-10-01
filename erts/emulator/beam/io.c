@@ -1292,6 +1292,14 @@ try_imm_drv_call(ErtsTryImmDrvCallState *sp)
     if (erts_system_profile_flags.runnable_ports
 	&& !erts_port_is_scheduled(prt))
     	profile_runnable_port(prt, am_active);
+#ifdef USE_VM_PROBES
+    if (DTRACE_ENABLED(port_active)
+        && !erts_port_is_scheduled(prt)) {
+        DTRACE_CHARBUF(portid, DTRACE_TERM_BUF_SIZE);
+        dtrace_port_str(prt, portid);
+        DTRACE2(port_active, portid, dtrace_ts());
+    }
+#endif
 
     sp->fpe_was_unmasked = erts_block_fpe();
 
@@ -1319,6 +1327,14 @@ finalize_imm_drv_call(ErtsTryImmDrvCallState *sp)
     if (erts_system_profile_flags.runnable_ports
 	&& !erts_port_is_scheduled(prt))
     	profile_runnable_port(prt, am_inactive);
+#ifdef USE_VM_PROBES
+    if (DTRACE_ENABLED(port_inactive)
+        && !erts_port_is_scheduled(prt)) {
+        DTRACE_CHARBUF(portid, DTRACE_TERM_BUF_SIZE);
+        dtrace_port_str(prt, portid);
+        DTRACE2(port_inactive, portid, dtrace_ts());
+    }
+#endif
 
     erts_port_release(prt);
 

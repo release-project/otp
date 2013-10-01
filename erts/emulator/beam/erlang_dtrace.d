@@ -407,8 +407,7 @@ provider erlang {
     probe process__unregistered(char *p, char *name, uint64_t ts);
 
     /**
-     * Fired when a process becomes active (i.e. is removed from a run queue 
-     * and is scheduled to run).
+     * Fired when a process becomes active.
      *
      * @param p the PID (string form) of the active process
      * @param mfa the m:f/a of the function the process will run in
@@ -417,8 +416,7 @@ provider erlang {
     probe process__active(char *p, char *mfa, uint64_t ts);
 
     /**
-     * Fired when a process becomes inactive (i.e. is put back into a run 
-     * queue, but not after being preemptively scheduled out).
+     * Fired when a process becomes inactive.
      *
      * @param p the PID (string form) of the inactive process
      * @param mfa the m:f/a of the function the process was running
@@ -625,6 +623,22 @@ provider erlang {
      * @param ts timestamp
      */
     probe port__unregistered(char *p, char *name, uint64_t ts);
+
+    /**
+     * Fired when a port becomes active.
+     *
+     * @param p the port ID of the active port
+     * @param ts timestamp
+     */
+    probe port__active(char *p, uint64_t ts);
+
+    /**
+     * Fired when a port becomes inactive.
+     *
+     * @param p the port ID of the inactive port
+     * @param ts timestamp
+     */
+    probe port__inactive(char *p, uint64_t ts);
 
     /* drivers */
 

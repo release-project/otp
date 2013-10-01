@@ -1500,6 +1500,14 @@ erts_port_task_schedule(Eterm id,
 	profile_runnable_port(pp, am_active);
     }
 
+#ifdef USE_VM_PROBES
+    if (DTRACE_ENABLED(port_active)) {
+        DTRACE_CHARBUF(portid, DTRACE_TERM_BUF_SIZE);
+        dtrace_port_str(pp, portid);
+        DTRACE2(port_active, portid, dtrace_ts());
+    }
+#endif
+
     erts_smp_runq_unlock(runq);
 
     erts_smp_notify_inc_runq(runq);
@@ -1786,8 +1794,17 @@ erts_port_task_execute(ErtsRunQueue *runq, Port **curr_port_pp)
     erts_smp_runq_lock(runq);
  
     if (!active) {
+
 	if (erts_system_profile_flags.runnable_ports)
 	    profile_runnable_port(pp, am_inactive);
+
+#ifdef USE_VM_PROBES
+        if (DTRACE_ENABLED(port_inactive)) {
+            DTRACE_CHARBUF(portid, DTRACE_TERM_BUF_SIZE);
+            dtrace_port_str(pp, portid);
+            DTRACE2(port_inactive, portid, dtrace_ts());
+        }
+#endif
     }
     else {
 #ifdef ERTS_SMP
