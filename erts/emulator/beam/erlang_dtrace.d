@@ -640,6 +640,24 @@ provider erlang {
      */
     probe port__inactive(char *p, uint64_t ts);
 
+    /* schedulers */
+
+    /**
+     * Fired when a scheduler becomes active.
+     *
+     * @param s the ID of the active scheduler
+     * @param ts timestamp
+     */
+    probe scheduler__active(uint s, uint64_t ts);
+
+    /**
+     * Fired when a scheduler becomes inactive.
+     *
+     * @param s the ID of the inactive scheduler
+     * @param ts timestamp
+     */
+    probe scheduler__inactive(uint s, uint64_t ts);
+
     /* drivers */
 
     /**
