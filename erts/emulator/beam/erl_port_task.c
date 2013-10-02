@@ -877,6 +877,14 @@ enqueue_port(ErtsRunQueue *runq, Port *pp)
     ASSERT(runq->ports.start && runq->ports.end);
 
     erts_smp_inc_runq_len(runq, &runq->ports.info, ERTS_PORT_PRIO_LEVEL);
+
+#ifdef USE_VM_PROBES
+    if (DTRACE_ENABLED(run_queue_port_enqueue)) {
+        DTRACE_CHARBUF(portid, DTRACE_TERM_BUF_SIZE);
+        erts_snprintf(portid, sizeof(portid), "%T", pp->common.id);
+        DTRACE3(run_queue_port_enqueue, runq->ix, portid, runq->len);
+    }
+#endif
 }
 
 static ERTS_INLINE Port *
@@ -898,6 +906,15 @@ pop_port(ErtsRunQueue *runq)
 
     ASSERT(runq->ports.start || !runq->ports.end);
     ASSERT(runq->ports.end || !runq->ports.start);
+
+#ifdef USE_VM_PROBES
+    if (DTRACE_ENABLED(run_queue_port_dequeue)) {
+        DTRACE_CHARBUF(portid, DTRACE_TERM_BUF_SIZE);
+        erts_snprintf(portid, sizeof(portid), "%T", pp->common.id);
+        DTRACE3(run_queue_port_dequeue, runq->ix, portid, runq->len);
+    }
+#endif
+
     return pp;
 }
 

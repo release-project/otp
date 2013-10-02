@@ -658,6 +658,44 @@ provider erlang {
      */
     probe scheduler__inactive(uint s, uint64_t ts);
 
+    /* run queues */
+
+    /**
+     * Fired when a process is added to a run queue.
+     *
+     * @param rq the ID of the run queue
+     * @param p the PID (string form) of the process  
+     * @param rqsize the size of the run queue (after the addition)
+     */
+    probe run_queue__process_enqueue(uint rq, char *p, int rqsize);
+
+    /**
+     * Fired when a process is removed from a run queue.
+     *
+     * @param rq the ID of the run queue
+     * @param p the PID (string form) of the process
+     * @param rqsize the size of the run queue (after the removal)
+     */
+    probe run_queue__process_dequeue(uint rq, char *p, int rqsize);
+
+    /**
+     * Fired when a port is added to a run queue.
+     *
+     * @param rq the ID of the run queue
+     * @param p the port ID of the port
+     * @param rqsize the size of the run queue (after the addition)
+     */
+    probe run_queue__port_enqueue(uint rq, char *port, int rqsize);
+
+    /**
+     * Fired when a port is removed from a run queue.
+     *
+     * @param rq the ID of the run queue
+     * @param p the port ID of the process
+     * @param rqsize the size of the run queue (after the removal)
+     */
+    probe run_queue__port_dequeue(uint rq, char *port, int rqsize);
+
     /* drivers */
 
     /**

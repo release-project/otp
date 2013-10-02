@@ -2815,6 +2815,14 @@ enqueue_process(ErtsRunQueue *runq, int prio, Process *p)
     else
 	rpq->first = p;
     rpq->last = p;
+
+#ifdef USE_VM_PROBES
+    if (DTRACE_ENABLED(run_queue_process_enqueue)) {
+        DTRACE_CHARBUF(pid, DTRACE_TERM_BUF_SIZE);
+        dtrace_proc_str(p, pid);
+        DTRACE3(run_queue_process_enqueue, runq->ix, pid, runq->len);
+    }
+#endif
 }
 
 
@@ -2874,6 +2882,14 @@ dequeue_process(ErtsRunQueue *runq, int prio_q, erts_aint32_t *statep)
 
     if (p)
 	unqueue_process(runq, rpq, rqi, prio, NULL, p);
+
+#ifdef USE_VM_PROBES
+    if (DTRACE_ENABLED(run_queue_process_dequeue)) {
+        DTRACE_CHARBUF(pid, DTRACE_TERM_BUF_SIZE);
+        dtrace_proc_str(p, pid);
+        DTRACE3(run_queue_process_dequeue, runq->ix, pid, runq->len);
+    }
+#endif
 
     return p;
 }
