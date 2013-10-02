@@ -3015,6 +3015,13 @@ immigrate(ErtsRunQueue *c_rq, ErtsMigrationPath *mp)
 				     "%s:%d:%s(): Internal error",
 				     __FILE__, __LINE__, __func__);
 			erts_enqueue_port(c_rq, prt);
+#ifdef USE_VM_PROBES
+                        if (DTRACE_ENABLED(port_migrate)) {
+                            DTRACE_CHARBUF(portid, DTRACE_TERM_BUF_SIZE);
+                            dtrace_port_str(prt, portid);
+                            DTRACE5(port_migrate, portid, rq->ix, rq->len, c_rq->ix, c_rq->len);
+                        }
+#endif
 			if (!iflag)
 			    return; /* done */
 			erts_smp_runq_unlock(c_rq);
@@ -3042,6 +3049,13 @@ immigrate(ErtsRunQueue *c_rq, ErtsMigrationPath *mp)
 
 			erts_smp_runq_lock(c_rq);
 			enqueue_process(c_rq, prio, proc);
+#ifdef USE_VM_PROBES
+                        if (DTRACE_ENABLED(process_migrate)) {
+                            DTRACE_CHARBUF(pid, DTRACE_TERM_BUF_SIZE);
+                            dtrace_proc_str(proc, pid);
+                            DTRACE5(process_migrate, pid, rq->ix, rq->len, c_rq->ix, c_rq->len);
+                        }
+#endif
 			if (!iflag)
 			    return; /* done */
 			erts_smp_runq_unlock(c_rq);

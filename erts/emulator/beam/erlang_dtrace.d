@@ -442,6 +442,21 @@ provider erlang {
      */
     probe process__exclusive_inactive(char *p, char *mfa, uint64_t ts);
 
+    /**
+     * Fired when a process migrates (i.e. is moved from one run queue to 
+     * another).
+     * 
+     * @param p the PID (string form) of the process
+     * @param fromrq the ID of the run queue, from which the process was 
+     * removed
+     * @param fromrqsize the size of the run queue, from which the process was
+     * removed (after the removal)
+     * @param torq the ID of the run queue, to which the process was added
+     * @ param torqsize the size of the run queue, to which the process was 
+     * added (after the addition)
+     */
+    probe process__migrate(char *p, uint fromrq, int fromrqsize, uint torq, int torqsize); 
+
     /* network distribution */
 
     /**
@@ -639,6 +654,21 @@ provider erlang {
      * @param ts timestamp
      */
     probe port__inactive(char *p, uint64_t ts);
+
+    /**
+     * Fired when a port migrates (i.e. is moved from one run queue to
+     * another).
+     *
+     * @param port the port ID of the port
+     * @param fromrq the ID of the run queue, from which the port was
+     * removed
+     * @param fromrqsize the size of the run queue, from which the port was
+     * removed (after the removal)
+     * @param torq the ID of the run queue, to which the port was added
+     * @ param torqsize the size of the run queue, to which the port was
+     * added (after the addition)
+     */
+    probe port__migrate(char *p, uint fromrq, int fromrqsize, uint torq, int torqsize);
 
     /* schedulers */
 
