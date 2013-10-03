@@ -863,6 +863,19 @@ handle_call({new_s_group, SGroupName, Nodes0}, _From, S) ->
                           },
             ?debug({"s_group_handle_new_s_group_NewS", NewS}),
     	    spawn(?MODULE, connect_s_group_nodes, [Nodes--[node()]]),
+
+            %% Fire the appropriate probes.
+            case dyntrace:available() of
+                true  ->
+                      dyntrace:put_tag("s_groups"),
+                      %% Fire the user probe 0 once for the creation of the s_group.
+                      dyntrace:pn(0, SGroupName),
+                      %% Fire the user probe 2 once for each newly added node.
+                      lists:foreach(fun(Node) -> dyntrace:pn(2, SGroupName, atom_to_list(Node)) end, Nodes);
+                false ->
+                      ok
+            end,
+
             {reply, {ok, SGroupName, Nodes}, NewS}
     end;
 
@@ -997,6 +1010,17 @@ handle_call({delete_s_group, SGroupName}, _From, S) ->
                    	   own_grps = NewOwnSGroups,
 		   	   other_grps = NewOtherSGroups
                    	   },
+
+            %% Fire the appropriate probes.
+            case dyntrace:available() of
+                true  ->
+                      dyntrace:put_tag("s_groups"),
+                      %% Fire the user probe 1 once for the deletion of the s_group.
+                      dyntrace:pn(1, SGroupName);
+                false ->
+                      ok
+            end,
+
     	    {reply, ok, NewS}
     end;
 
@@ -1133,6 +1157,17 @@ handle_call({add_nodes, SGroupName, Nodes}, _From, S) ->
                                   },
                     ?debug({"s_group_handle_add_nodes_NewS", NewS}),
     	    	    spawn(?MODULE, connect_s_group_nodes, [Nodes--[node()]]),
+
+                    %% Fire the appropriate probes.
+                    case dyntrace:available() of
+                        true  ->
+                              dyntrace:put_tag("s_groups"),
+                              %% Fire the user probe 2 once for each newly added node.
+                              lists:foreach(fun(Node) -> dyntrace:pn(2, SGroupName, atom_to_list(Node)) end, NewNodes);
+                        false ->
+                              ok
+                    end,
+
                     {reply, {ok, SGroupName, NewNodes}, NewS}
             end
     end;
@@ -1255,6 +1290,17 @@ handle_call({remove_nodes, SGroupName, NodesToRmv0}, _From, S) ->
                	    		   %%sync_error = S#state.sync_error
 	   	    		   %%monitor = S#state.monitor,
                	    		   },
+
+                    %% Fire the appropriate probes.
+                    case dyntrace:available() of
+                        true  ->
+                              dyntrace:put_tag("s_groups"),
+                              %% Fire the user probe 3 once for each removed node.
+                              lists:foreach(fun(Node) -> dyntrace:pn(3, SGroupName, atom_to_list(Node)) end, NodesToRmv);
+                        false ->
+                              ok
+                    end,
+
 		    {reply, 'ok', NewS}
 	    end
     end;
