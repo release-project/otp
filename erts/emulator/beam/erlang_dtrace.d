@@ -318,6 +318,14 @@ provider erlang {
     probe process__unscheduled(char *p, char *mfa, uint64_t ts);
 
     /**
+     * Fired when an exiting process is scheduled.
+     *
+     * @param p the PID (string form) of the newly scheduled process
+     * @param ts timestamp
+     */
+    probe process__scheduled_exiting(char *p, uint64_t ts);
+
+    /**
      * Fired when a process goes into hibernation.
      *
      * @param p the PID (string form) of the process entering hibernation

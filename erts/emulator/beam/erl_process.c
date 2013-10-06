@@ -7343,6 +7343,14 @@ Process *schedule(Process *p, int calls)
 	    }
 	}
 
+#ifdef USE_VM_PROBES
+        if (DTRACE_ENABLED(process_scheduled_exiting) & state & ERTS_PSFLG_EXITING) {
+            DTRACE_CHARBUF(pid, DTRACE_TERM_BUF_SIZE);
+            dtrace_proc_str(p, pid);
+            DTRACE2(process_scheduled_exiting, pid, dtrace_ts());
+        }
+#endif
+
 	erts_smp_proc_unlock(p, ERTS_PROC_LOCK_STATUS);
 
 #ifdef ERTS_SMP
