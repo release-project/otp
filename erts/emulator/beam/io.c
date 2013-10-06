@@ -3652,7 +3652,7 @@ erts_deliver_port_exit(Port *p, Eterm from, Eterm reason, int send_closed)
        erts_snprintf(from_str, sizeof(from_str), "%T", from);
        dtrace_port_str(p, port_str);
        erts_snprintf(rreason_str, sizeof(rreason_str), "%T", rreason);
-       DTRACE4(port_exit, from_str, port_str, p->name, rreason_str);
+       DTRACE5(port_exit, from_str, port_str, p->name, rreason_str, dtrace_ts());
    }
 #endif
 

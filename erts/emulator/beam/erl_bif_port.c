@@ -871,7 +871,7 @@ open_port(Process* p, Eterm name, Eterm settings, int *err_typep, int *err_nump)
 
         dtrace_proc_str(p, process_str);
         erts_snprintf(port_str, sizeof(port_str), "%T", port->common.id);
-        DTRACE3(port_open, process_str, name_buf, port_str);
+        DTRACE4(port_open, process_str, name_buf, port_str, dtrace_ts());
     }
 #endif
     erts_smp_proc_lock(p, ERTS_PROC_LOCK_MAIN);

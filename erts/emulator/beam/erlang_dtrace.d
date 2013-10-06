@@ -525,8 +525,9 @@ provider erlang {
      * @param process the PID (string form) of the process that opened the port
      * @param port_name the string used when the port was opened
      * @param port the port ID of the new port
+     * @param ts timestamp
      */
-    probe port__open(char *process, char *port_name, char *port);
+    probe port__open(char *process, char *port_name, char *port, uint64_t ts);
 
     /**
      * Fired when port_command is issued.
@@ -556,9 +557,9 @@ provider erlang {
      * @param port the port ID of the port
      * @param port_name the string used when the port was opened
      * @param reason the reason for the exit, e.g. 'normal'
+     * @param ts timestamp
      */
-    probe port__exit(char *process, char *port, char *port_name,
-                     char *reason);
+    probe port__exit(char *process, char *port, char *port_name, char *reason, uint64_t ts);
 
     /**
      * Fired when port_connect is issued.
