@@ -6987,6 +6987,16 @@ Process *schedule(Process *p, int calls)
 	    }
 	}
 
+#ifdef USE_VM_PROBES
+        if (state & (ERTS_PSFLG_FREE|ERTS_PSFLG_EXITING)) {
+            if (DTRACE_ENABLED(process_unscheduled_exiting) && !(state & ERTS_PSFLG_FREE)) {
+                DTRACE_CHARBUF(pid, DTRACE_TERM_BUF_SIZE);
+                dtrace_proc_str(p, pid);
+                DTRACE2(process_unscheduled_exiting, pid, dtrace_ts());
+            }
+        }
+#endif
+
 #ifdef ERTS_SMP
 	if (state & ERTS_PSFLG_PENDING_EXIT)
 	    erts_handle_pending_exit(p, (ERTS_PROC_LOCK_MAIN
@@ -7344,7 +7354,7 @@ Process *schedule(Process *p, int calls)
 	}
 
 #ifdef USE_VM_PROBES
-        if (DTRACE_ENABLED(process_scheduled_exiting) & state & ERTS_PSFLG_EXITING) {
+        if (DTRACE_ENABLED(process_scheduled_exiting) && (state & ERTS_PSFLG_EXITING)) {
             DTRACE_CHARBUF(pid, DTRACE_TERM_BUF_SIZE);
             dtrace_proc_str(p, pid);
             DTRACE2(process_scheduled_exiting, pid, dtrace_ts());
