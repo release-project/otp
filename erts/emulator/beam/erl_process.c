@@ -6988,12 +6988,15 @@ Process *schedule(Process *p, int calls)
 	}
 
 #ifdef USE_VM_PROBES
-        if (state & (ERTS_PSFLG_FREE|ERTS_PSFLG_EXITING)) {
-            if (DTRACE_ENABLED(process_unscheduled_exiting) && !(state & ERTS_PSFLG_FREE)) {
-                DTRACE_CHARBUF(pid, DTRACE_TERM_BUF_SIZE);
-                dtrace_proc_str(p, pid);
-                DTRACE2(process_unscheduled_exiting, pid, dtrace_ts());
-            }
+        if (DTRACE_ENABLED(process_unscheduled_exiting) && !(state & ERTS_PSFLG_FREE)) {
+            DTRACE_CHARBUF(pid, DTRACE_TERM_BUF_SIZE);
+            dtrace_proc_str(p, pid);
+            DTRACE2(process_unscheduled_exiting, pid, dtrace_ts());
+        }
+        if (DTRACE_ENABLED(process_unscheduled_exited) && (state & ERTS_PSFLG_FREE)) {
+            DTRACE_CHARBUF(pid, DTRACE_TERM_BUF_SIZE);
+            dtrace_proc_str(p, pid);
+            DTRACE2(process_unscheduled_exited, pid, dtrace_ts());
         }
 #endif
 
