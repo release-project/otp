@@ -522,17 +522,17 @@ provider erlang {
     /**
      * Fired when new port is opened.
      *
-     * @param process the PID (string form)
+     * @param process the PID (string form) of the process that opened the port
      * @param port_name the string used when the port was opened
-     * @param port the Port (string form) of the new port
+     * @param port the port ID of the new port
      */
     probe port__open(char *process, char *port_name, char *port);
 
     /**
      * Fired when port_command is issued.
      *
-     * @param process the PID (string form)
-     * @param port the Port (string form)
+     * @param process the PID (string form) of the process that issued the command
+     * @param port the port ID of the port
      * @param port_name the string used when the port was opened
      * @param command_type type of the issued command, one of: "close", "command" or "connect"
      */
@@ -541,8 +541,8 @@ provider erlang {
     /**
      * Fired when port_control is issued.
      *
-     * @param process the PID (string form)
-     * @param port the Port (string form)
+     * @param process the PID (string form) of the process that issued the command
+     * @param port the port ID of the port
      * @param port_name the string used when the port was opened
      * @param command_no command number that has been issued to the port
      */
@@ -552,19 +552,19 @@ provider erlang {
      * Fired when port is closed via port_close/1 (reason = 'normal')
      * or is sent an exit signal.
      *
-     * @param process the PID (string form)
-     * @param port the Port (string form)
+     * @param process the PID (string form) of the process that closed the port
+     * @param port the port ID of the port
      * @param port_name the string used when the port was opened
-     * @param reason Erlang term representing the exit signal, e.g. 'normal'
+     * @param reason the reason for the exit, e.g. 'normal'
      */
     probe port__exit(char *process, char *port, char *port_name,
-                     char *new_process);
+                     char *reason);
 
     /**
      * Fired when port_connect is issued.
      *
      * @param process the PID (string form) of the current port owner
-     * @param port the Port (string form)
+     * @param port the port ID of the port
      * @param port_name the string used when the port was opened
      * @param new_process the PID (string form) of the new port owner
      */
