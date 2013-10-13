@@ -1294,7 +1294,13 @@ void process_main(void)
                     erts_snprintf(fun_buf, sizeof(fun_buf), "0");
                 }
             }
-            DTRACE3(process_scheduled, process_buf, fun_buf, dtrace_ts());
+#ifdef ERTS_SMP
+            Uint sched_id = c_p->scheduler_data->no;
+#else
+            Uint sched_id = 1;
+#endif
+            DTRACE4(process_scheduled, process_buf, fun_buf, sched_id, 
+                    dtrace_ts());
         }
 #endif
 	Goto(next);

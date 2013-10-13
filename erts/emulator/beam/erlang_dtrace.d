@@ -312,9 +312,10 @@ provider erlang {
      * @param p the PID (in External Term Format as string) of the newly 
      * scheduled process
      * @param mfa the m:f/a of the function the process will run in
+     * @param s the scheduler that will run the process
      * @param ts timestamp
      */
-    probe process__scheduled(char *p, char *mfa, uint64_t ts);
+    probe process__scheduled(char *p, char *mfa, uint s, uint64_t ts);
 
     /**
      * Fired when a process is unscheduled.
@@ -322,36 +323,40 @@ provider erlang {
      * @param p the PID (in External Term Format as string) of the process that 
      * has been unscheduled
      * @param mfa the m:f/a of the function that was running
+     * @param s the scheduler that was running the process
      * @param ts timestamp
      */
-    probe process__unscheduled(char *p, char *mfa, uint64_t ts);
+    probe process__unscheduled(char *p, char *mfa, uint s, uint64_t ts);
 
     /**
      * Fired when an exiting process is scheduled.
      *
      * @param p the PID (in External Term Format as string) of the newly 
      * scheduled process
+     * @param s the scheduler that will runthe process
      * @param ts timestamp
      */
-    probe process__scheduled_exiting(char *p, uint64_t ts);
+    probe process__scheduled_exiting(char *p, uint s, uint64_t ts);
 
     /**
      * Fired when an exiting process is unscheduled.
      *
      * @param p the PID (in External Term Format as string) of the process that 
      * has been unscheduled
+     * @param s the scheduler that was running the process
      * @param ts timestamp
      */
-    probe process__unscheduled_exiting(char *p, uint64_t ts);
+    probe process__unscheduled_exiting(char *p, uint s, uint64_t ts);
 
     /**
      * Fired when an exited process is unscheduled.
      *
      * @param p the PID (in External Term Format as string) of the process that 
      * has been unscheduled
+     * @param s the scheduler that was running the process
      * @param ts timestamp
      */
-    probe process__unscheduled_exited(char *p, uint64_t ts);
+    probe process__unscheduled_exited(char *p, uint s, uint64_t ts);
 
     /**
      * Fired when a process goes into hibernation.
