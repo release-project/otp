@@ -425,7 +425,7 @@ erts_garbage_collect(Process* p, int need, Eterm* objv, int nobj)
         || DTRACE_ENABLED(gc_major_end)
         || DTRACE_ENABLED(gc_minor_start)
         || DTRACE_ENABLED(gc_minor_end)) {
-        dtrace_proc_str(p, pidbuf);
+        dtrace_proc_bin(p, pidbuf);
     }
 #endif
     /*

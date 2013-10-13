@@ -998,8 +998,8 @@ init_emulator(void)
         DTRACE_CHARBUF(process_name, DTRACE_TERM_BUF_SIZE);		\
         DTRACE_CHARBUF(mfa, DTRACE_TERM_BUF_SIZE);			\
         int depth = STACK_START(p) - STACK_TOP(p);			\
-        dtrace_fun_decode(p, m, f, a,					\
-                          process_name, mfa);				\
+        dtrace_fun_decode_bin(p, m, f, a,				\
+                              process_name, mfa);			\
         DTRACE4(local_function_entry, process_name, mfa, depth,         \
                 dtrace_ts());	                                        \
     }
@@ -1009,8 +1009,8 @@ init_emulator(void)
         DTRACE_CHARBUF(process_name, DTRACE_TERM_BUF_SIZE);		\
         DTRACE_CHARBUF(mfa, DTRACE_TERM_BUF_SIZE);			\
         int depth = STACK_START(p) - STACK_TOP(p);			\
-        dtrace_fun_decode(p, m, f, a,					\
-                          process_name, mfa);				\
+        dtrace_fun_decode_bin(p, m, f, a,				\
+                              process_name, mfa);			\
         DTRACE4(global_function_entry, process_name, mfa, depth,        \
                 dtrace_ts());	                                        \
     }
@@ -1020,8 +1020,8 @@ init_emulator(void)
         DTRACE_CHARBUF(process_name, DTRACE_TERM_BUF_SIZE);     \
         DTRACE_CHARBUF(mfa, DTRACE_TERM_BUF_SIZE);              \
         int depth = STACK_START(p) - STACK_TOP(p);              \
-        dtrace_fun_decode(p, m, f, a,                           \
-                          process_name, mfa);                   \
+        dtrace_fun_decode_bin(p, m, f, a,                       \
+                              process_name, mfa);               \
         DTRACE4(function_return, process_name, mfa, depth,      \
                 dtrace_ts());                                   \
     }
@@ -1030,8 +1030,8 @@ init_emulator(void)
     if (DTRACE_ENABLED(bif_entry)) {                            \
         DTRACE_CHARBUF(process_name, DTRACE_TERM_BUF_SIZE);     \
         DTRACE_CHARBUF(mfa, DTRACE_TERM_BUF_SIZE);              \
-        dtrace_fun_decode(p, m, f, a,                           \
-                          process_name, mfa);                   \
+        dtrace_fun_decode_bin(p, m, f, a,                       \
+                              process_name, mfa);               \
         DTRACE3(bif_entry, process_name, mfa, dtrace_ts());     \
     }
 
@@ -1039,8 +1039,8 @@ init_emulator(void)
     if (DTRACE_ENABLED(bif_return)) {                           \
         DTRACE_CHARBUF(process_name, DTRACE_TERM_BUF_SIZE);     \
         DTRACE_CHARBUF(mfa, DTRACE_TERM_BUF_SIZE);              \
-        dtrace_fun_decode(p, m, f, a,                           \
-                          process_name, mfa);                   \
+        dtrace_fun_decode_bin(p, m, f, a,                       \
+                              process_name, mfa);               \
         DTRACE3(bif_return, process_name, mfa, dtrace_ts());    \
     }
 
@@ -1048,8 +1048,8 @@ init_emulator(void)
     if (DTRACE_ENABLED(nif_entry)) {                            \
         DTRACE_CHARBUF(process_name, DTRACE_TERM_BUF_SIZE);     \
         DTRACE_CHARBUF(mfa, DTRACE_TERM_BUF_SIZE);              \
-        dtrace_fun_decode(p, m, f, a,                           \
-                          process_name, mfa);                   \
+        dtrace_fun_decode_bin(p, m, f, a,                       \
+                              process_name, mfa);               \
         DTRACE3(nif_entry, process_name, mfa, dtrace_ts());     \
     }
 
@@ -1057,8 +1057,8 @@ init_emulator(void)
     if (DTRACE_ENABLED(nif_return)) {                           \
         DTRACE_CHARBUF(process_name, DTRACE_TERM_BUF_SIZE);     \
         DTRACE_CHARBUF(mfa, DTRACE_TERM_BUF_SIZE);              \
-        dtrace_fun_decode(p, m, f, a,                           \
-                          process_name, mfa);                   \
+        dtrace_fun_decode_bin(p, m, f, a,                       \
+                              process_name, mfa);               \
         DTRACE3(nif_return, process_name, mfa, dtrace_ts());    \
     }
 
@@ -1068,7 +1068,7 @@ init_emulator(void)
         Sint tok_label = 0;                                     \
         Sint tok_lastcnt = 0;                                   \
         Sint tok_serial = 0;                                    \
-        dtrace_proc_str(r, receiver_name);                      \
+        dtrace_proc_bin(r, receiver_name);                      \
         if (s != NIL && is_tuple(s)) {                          \
             tok_label = signed_val(SEQ_TRACE_T_LABEL(s));       \
             tok_lastcnt = signed_val(SEQ_TRACE_T_LASTCNT(s));   \
@@ -1280,16 +1280,16 @@ void process_main(void)
         if (DTRACE_ENABLED(process_scheduled)) {
             DTRACE_CHARBUF(process_buf, DTRACE_TERM_BUF_SIZE);
             DTRACE_CHARBUF(fun_buf, DTRACE_TERM_BUF_SIZE);
-            dtrace_proc_str(c_p, process_buf);
+            dtrace_proc_bin(c_p, process_buf);
 
             if (ERTS_PROC_IS_EXITING(c_p)) {
                 strcpy(fun_buf, "<exiting>");
             } else {
                 BeamInstr *fptr = find_function_from_pc(c_p->i);
                 if (fptr) {
-                    dtrace_fun_decode(c_p, (Eterm)fptr[0],
-                                      (Eterm)fptr[1], (Uint)fptr[2],
-                                      NULL, fun_buf);
+                    dtrace_fun_decode_bin(c_p, (Eterm)fptr[0],
+                                          (Eterm)fptr[1], (Uint)fptr[2],
+                                          NULL, fun_buf);
                 } else {
                     erts_snprintf(fun_buf, sizeof(fun_buf), "0");
                 }
@@ -1957,7 +1957,7 @@ void process_main(void)
          Sint tok_lastcnt = 0;
          Sint tok_serial = 0;
 
-         dtrace_proc_str(c_p, receiver_name);
+         dtrace_proc_bin(c_p, receiver_name);
          token2 = SEQ_TRACE_TOKEN(c_p);
          if (token2 != NIL && token2 != am_have_dt_utag) {
              tok_label = signed_val(SEQ_TRACE_T_LABEL(token2));

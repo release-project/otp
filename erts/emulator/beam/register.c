@@ -228,7 +228,7 @@ int erts_register_name(Process *c_p, Eterm name, Eterm id)
         if (DTRACE_ENABLED(process_registered)) {
             DTRACE_CHARBUF(pid, DTRACE_TERM_BUF_SIZE);
             DTRACE_CHARBUF(rname, DTRACE_TERM_BUF_SIZE);
-            dtrace_proc_str(proc, pid);
+            dtrace_proc_bin(proc, pid);
             erts_snprintf(rname, DTRACE_TERM_BUF_SIZE - 1, "%T", name);
             DTRACE3(process_registered, pid, rname, dtrace_ts());
         }
@@ -243,7 +243,7 @@ int erts_register_name(Process *c_p, Eterm name, Eterm id)
         if (DTRACE_ENABLED(port_registered)) {
             DTRACE_CHARBUF(portid, DTRACE_TERM_BUF_SIZE);
             DTRACE_CHARBUF(rname, DTRACE_TERM_BUF_SIZE);
-            dtrace_port_str(port, portid);
+            dtrace_port_bin(port, portid);
             erts_snprintf(rname, DTRACE_TERM_BUF_SIZE - 1, "%T", name);
             DTRACE3(port_registered, portid, rname, dtrace_ts());
         }
@@ -556,7 +556,7 @@ int erts_unregister_name(Process *c_p,
             if (DTRACE_ENABLED(port_unregistered)) {
                 DTRACE_CHARBUF(portid, DTRACE_TERM_BUF_SIZE);
                 DTRACE_CHARBUF(rname, DTRACE_TERM_BUF_SIZE);
-                dtrace_port_str(port, portid);
+                dtrace_port_bin(port, portid);
                 erts_snprintf(rname, DTRACE_TERM_BUF_SIZE - 1, "%T", r.name);
                 DTRACE3(port_unregistered, portid, rname, dtrace_ts());
             }
@@ -581,7 +581,7 @@ int erts_unregister_name(Process *c_p,
             if (DTRACE_ENABLED(process_unregistered)) {
                 DTRACE_CHARBUF(pid, DTRACE_TERM_BUF_SIZE);
                 DTRACE_CHARBUF(rname, DTRACE_TERM_BUF_SIZE);
-                dtrace_proc_str(rp->p, pid);
+                dtrace_proc_bin(rp->p, pid);
                 erts_snprintf(rname, DTRACE_TERM_BUF_SIZE - 1, "%T", r.name);
                 DTRACE3(process_unregistered, pid, rname, dtrace_ts());
             }

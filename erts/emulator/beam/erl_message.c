@@ -356,7 +356,7 @@ erts_queue_dist_message(Process *rcvr,
             if (DTRACE_ENABLED(message_queued)) {
                 DTRACE_CHARBUF(receiver_name, DTRACE_TERM_BUF_SIZE);
 
-                dtrace_proc_str(rcvr, receiver_name);
+                dtrace_proc_bin(rcvr, receiver_name);
                 if (token != NIL && token != am_have_dt_utag) {
                     tok_label = signed_val(SEQ_TRACE_T_LABEL(token));
                     tok_lastcnt = signed_val(SEQ_TRACE_T_LASTCNT(token));
@@ -393,7 +393,7 @@ erts_queue_dist_message(Process *rcvr,
         if (DTRACE_ENABLED(message_queued)) {
             DTRACE_CHARBUF(receiver_name, DTRACE_TERM_BUF_SIZE);
 
-            dtrace_proc_str(rcvr, receiver_name);
+            dtrace_proc_bin(rcvr, receiver_name);
             if (token != NIL && token != am_have_dt_utag) {
                 tok_label = signed_val(SEQ_TRACE_T_LABEL(token));
                 tok_lastcnt = signed_val(SEQ_TRACE_T_LASTCNT(token));
@@ -522,7 +522,7 @@ queue_message(Process *c_p,
         Sint tok_lastcnt = 0;
         Sint tok_serial = 0;
 
-        dtrace_proc_str(receiver, receiver_name);
+        dtrace_proc_bin(receiver, receiver_name);
         if (seq_trace_token != NIL && is_tuple(seq_trace_token)) {
             tok_label = signed_val(SEQ_TRACE_T_LABEL(seq_trace_token));
             tok_lastcnt = signed_val(SEQ_TRACE_T_LASTCNT(seq_trace_token));
@@ -881,8 +881,8 @@ erts_send_message(Process* sender,
     Eterm token = NIL;
     Sint res = 0;
 #ifdef USE_VM_PROBES
-    DTRACE_CHARBUF(sender_name, 64);
-    DTRACE_CHARBUF(receiver_name, 64);
+    DTRACE_CHARBUF(sender_name, DTRACE_TERM_BUF_SIZE);
+    DTRACE_CHARBUF(receiver_name, DTRACE_TERM_BUF_SIZE);
     Sint tok_label = 0;
     Sint tok_lastcnt = 0;
     Sint tok_serial = 0;
@@ -894,8 +894,8 @@ erts_send_message(Process* sender,
  #ifdef USE_VM_PROBES
     *sender_name = *receiver_name = '\0';
    if (DTRACE_ENABLED(message_send)) {
-        erts_snprintf(sender_name, sizeof(DTRACE_CHARBUF_NAME(sender_name)), "%T", sender->common.id);
-        erts_snprintf(receiver_name, sizeof(DTRACE_CHARBUF_NAME(receiver_name)), "%T", receiver->common.id);
+        dtrace_proc_bin(sender, sender_name);
+        dtrace_proc_bin(receiver, receiver_name);
     }
 #endif
     if (SEQ_TRACE_TOKEN(sender) != NIL && !(flags & ERTS_SND_FLG_NO_SEQ_TRACE)) {
@@ -1026,7 +1026,7 @@ erts_send_message(Process* sender,
 #ifdef USE_VM_PROBES
             if (DTRACE_ENABLED(message_queued)) {
                DTRACE_CHARBUF(receiver_name, DTRACE_TERM_BUF_SIZE);
-               dtrace_proc_str(receiver, receiver_name);
+               dtrace_proc_bin(receiver, receiver_name);
                DTRACE7(message_queued,
                        receiver_name, size_object(message), receiver->msg.len,
                        tok_label, tok_lastcnt, tok_serial, dtrace_ts());

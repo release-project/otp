@@ -1233,16 +1233,33 @@ erts_alloc_message_heap(Uint size,
 #  define UnUseTmpHeapNoproc(Size) /* Nothing */
 #endif /* HEAP_ON_C_STACK */
 
+ERTS_GLB_INLINE void dtrace_term_bin(Eterm t, char *buf);
 ERTS_GLB_INLINE void dtrace_pid_str(Eterm pid, char *process_buf);
+ERTS_GLB_INLINE void dtrace_pid_bin(Eterm pid, char *process_buf);
 ERTS_GLB_INLINE void dtrace_proc_str(Process *process, char *process_buf);
+ERTS_GLB_INLINE void dtrace_proc_bin(Process *process, char *process_buf);
+ERTS_GLB_INLINE void dtrace_portid_str(Eterm portid, char *port_buf);
+ERTS_GLB_INLINE void dtrace_portid_bin(Eterm portid, char *port_buf);
 ERTS_GLB_INLINE void dtrace_port_str(Port *port, char *port_buf);
+ERTS_GLB_INLINE void dtrace_port_bin(Port *port, char *port_buf);
 ERTS_GLB_INLINE void dtrace_fun_decode(Process *process,
 				       Eterm module, Eterm function, int arity,
 				       char *process_buf, char *mfa_buf);
+ERTS_GLB_INLINE void dtrace_fun_decode_bin(Process *process,
+                                           Eterm module, Eterm function, int arity,
+                                           char *process_buf, char *mfa_buf);
 
 #if ERTS_GLB_INLINE_INCL_FUNC_DEF
 
 #include "dtrace-wrapper.h"
+
+extern void dtrace_encode_ext_as_string(Eterm t, char *buf);
+
+ERTS_GLB_INLINE void
+dtrace_term_bin(Eterm t, char *buf)
+{
+    dtrace_encode_ext_as_string(t, buf);
+}
 
 ERTS_GLB_INLINE void
 dtrace_pid_str(Eterm pid, char *process_buf)
@@ -1251,6 +1268,11 @@ dtrace_pid_str(Eterm pid, char *process_buf)
                   pid_channel_no(pid),
                   pid_number(pid),
                   pid_serial(pid));
+}
+ERTS_GLB_INLINE void
+dtrace_pid_bin(Eterm pid, char *process_buf)
+{
+    dtrace_term_bin(pid, process_buf);
 }
 
 ERTS_GLB_INLINE void
@@ -1262,9 +1284,21 @@ dtrace_portid_str(Eterm portid, char *port_buf)
 }
 
 ERTS_GLB_INLINE void
+dtrace_portid_bin(Eterm portid, char *port_buf)
+{
+    dtrace_term_bin(portid, port_buf);
+}
+
+ERTS_GLB_INLINE void
 dtrace_proc_str(Process *process, char *process_buf)
 {
     dtrace_pid_str(process->common.id, process_buf);
+}
+
+ERTS_GLB_INLINE void
+dtrace_proc_bin(Process *process, char *process_buf)
+{
+    dtrace_pid_bin(process->common.id, process_buf);
 }
 
 ERTS_GLB_INLINE void
@@ -1274,12 +1308,31 @@ dtrace_port_str(Port *port, char *port_buf)
 }
 
 ERTS_GLB_INLINE void
+dtrace_port_bin(Port *port, char *port_buf)
+{
+    dtrace_portid_bin(port->common.id, port_buf);
+}
+
+ERTS_GLB_INLINE void
 dtrace_fun_decode(Process *process,
                   Eterm module, Eterm function, int arity,
                   char *process_buf, char *mfa_buf)
 {
     if (process_buf) {
         dtrace_proc_str(process, process_buf);
+    }
+
+    erts_snprintf(mfa_buf, DTRACE_TERM_BUF_SIZE, "%T:%T/%d",
+                  module, function, arity);
+}
+
+ERTS_GLB_INLINE void
+dtrace_fun_decode_bin(Process *process,
+                      Eterm module, Eterm function, int arity,
+                      char *process_buf, char *mfa_buf)
+{
+    if (process_buf) {
+        dtrace_proc_bin(process, process_buf);
     }
 
     erts_snprintf(mfa_buf, DTRACE_TERM_BUF_SIZE, "%T:%T/%d",

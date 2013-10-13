@@ -51,8 +51,9 @@ provider erlang {
      *       that the actual size of any binary terms in the message
      *       are not included.
      *
-     * @param sender the PID (string form) of the sender
-     * @param receiver the PID (string form) of the receiver
+     * @param sender the PID (in External Term Format as string) of the sender
+     * @param receiver the PID (in External Term Format as string) of the 
+     * receiver
      * @param size the size of the message being delivered (words)
      * @param token_label for the sender's sequential trace token
      * @param token_previous count for the sender's sequential trace token
@@ -96,7 +97,8 @@ provider erlang {
      *       avoid the extra CPU overhead, the message size may be
      *       reported as -1, which can appear to a D script as 4294967295.
      *
-     * @param receiver the PID (string form) of the receiver
+     * @param receiver the PID (in External Term Format as string) of the 
+     * receiver
      * @param size the size of the message being delivered (words)
      * @param queue_len length of the queue of the receiving process
      * @param token_label for the sender's sequential trace token
@@ -155,7 +157,7 @@ provider erlang {
     /**
      * Fired whenever a user function is being called locally.
      *
-     * @param p the PID (string form) of the process
+     * @param p the PID (in External Term Format as string) of the process
      * @param mfa the m:f/a of the function
      * @param depth the stack depth
      * @param ts timestamp
@@ -166,7 +168,7 @@ provider erlang {
      * Fired whenever a user function is called externally
      * (through an export entry).
      *
-     * @param p the PID (string form) of the process
+     * @param p the PID (in External Term Format as string) of the process
      * @param mfa the m:f/a of the function
      * @param depth the stack depth
      * @param ts timestamp
@@ -176,7 +178,7 @@ provider erlang {
     /**
      * Fired whenever a user function returns.
      *
-     * @param p the PID (string form) of the process
+     * @param p the PID (in External Term Format as string) of the process
      * @param mfa the m:f/a of the function
      * @param depth the stack depth
      * @param ts timestamp
@@ -186,7 +188,7 @@ provider erlang {
     /**
      * Fired whenever a Built In Function is called.
      *
-     * @param p the PID (string form) of the process
+     * @param p the PID (in External Term Format as string) of the process
      * @param mfa the m:f/a of the function
      * @param ts timestamp
      */
@@ -195,7 +197,7 @@ provider erlang {
     /**
      * Fired whenever a Built In Function returns.
      *
-     * @param p the PID (string form) of the process
+     * @param p the PID (in External Term Format as string) of the process
      * @param mfa the m:f/a of the function
      * @param ts timestamp
      */
@@ -204,7 +206,7 @@ provider erlang {
     /**
      * Fired whenever a Native Function is called.
      *
-     * @param p the PID (string form) of the process
+     * @param p the PID (in External Term Format as string) of the process
      * @param mfa the m:f/a of the function
      * @param ts timestamp
      */
@@ -213,7 +215,7 @@ provider erlang {
     /**
      * Fired whenever a Native Function returns.
      *
-     * @param p the PID (string form) of the process
+     * @param p the PID (in External Term Format as string) of the process
      * @param mfa the m:f/a of the function
      * @param ts timestamp
      */
@@ -222,7 +224,8 @@ provider erlang {
     /**
      * Fired when a major GC is starting.
      *
-     * @param p the PID (string form) of the exiting process
+     * @param p the PID (in External Term Format as string) of the exiting 
+     * process
      * @param need the number of words needed on the heap
      * @param ts timestamp
      */
@@ -231,7 +234,8 @@ provider erlang {
     /**
      * Fired when a minor GC is starting.
      *
-     * @param p the PID (string form) of the exiting process
+     * @param p the PID (in External Term Format as string) of the exiting 
+     * process
      * @param need the number of words needed on the heap
      * @param ts timestamp
      */
@@ -240,7 +244,8 @@ provider erlang {
     /**
      * Fired when a major GC is starting.
      *
-     * @param p the PID (string form) of the exiting process
+     * @param p the PID (in External Term Format as string) of the exiting 
+     * process
      * @param reclaimed the amount of space reclaimed
      * @param ts timestamp
      */
@@ -249,7 +254,8 @@ provider erlang {
     /**
      * Fired when a minor GC is starting.
      *
-     * @param p the PID (string form) of the exiting process
+     * @param p the PID (in External Term Format as string) of the exiting 
+     * process
      * @param reclaimed the amount of space reclaimed
      * @param ts timestamp
      */
@@ -258,8 +264,9 @@ provider erlang {
     /**
      * Fired when a process is spawned.
      *
-     * @param p the PID (string form) of the new process.
-     * @param p2 the PID (string form) of the parent process.
+     * @param p the PID (in External Term Format as string) of the new process
+     * @param p2 the PID (in External Term Format as string) of the parent 
+     * process
      * @param mfa the m:f/a of the function
      * @param ts timestamp
      */
@@ -268,7 +275,8 @@ provider erlang {
     /**
      * Fired when a process is exiting.
      *
-     * @param p the PID (string form) of the exiting process
+     * @param p the PID (in External Term Format as string) of the exiting 
+     * process
      * @param reason the reason for the exit (may be truncated)
      * @param ts timestamp
      */
@@ -301,7 +309,8 @@ provider erlang {
     /**
      * Fired when a process is scheduled.
      *
-     * @param p the PID (string form) of the newly scheduled process
+     * @param p the PID (in External Term Format as string) of the newly 
+     * scheduled process
      * @param mfa the m:f/a of the function the process will run in
      * @param ts timestamp
      */
@@ -310,8 +319,8 @@ provider erlang {
     /**
      * Fired when a process is unscheduled.
      *
-     * @param p the PID (string form) of the process that has been
-     * unscheduled
+     * @param p the PID (in External Term Format as string) of the process that 
+     * has been unscheduled
      * @param mfa the m:f/a of the function that was running
      * @param ts timestamp
      */
@@ -320,7 +329,8 @@ provider erlang {
     /**
      * Fired when an exiting process is scheduled.
      *
-     * @param p the PID (string form) of the newly scheduled process
+     * @param p the PID (in External Term Format as string) of the newly 
+     * scheduled process
      * @param ts timestamp
      */
     probe process__scheduled_exiting(char *p, uint64_t ts);
@@ -328,8 +338,8 @@ provider erlang {
     /**
      * Fired when an exiting process is unscheduled.
      *
-     * @param p the PID (string form) of the process that has been
-     * unscheduled
+     * @param p the PID (in External Term Format as string) of the process that 
+     * has been unscheduled
      * @param ts timestamp
      */
     probe process__unscheduled_exiting(char *p, uint64_t ts);
@@ -337,8 +347,8 @@ provider erlang {
     /**
      * Fired when an exited process is unscheduled.
      *
-     * @param p the PID (string form) of the process that has been
-     * unscheduled
+     * @param p the PID (in External Term Format as string) of the process that 
+     * has been unscheduled
      * @param ts timestamp
      */
     probe process__unscheduled_exited(char *p, uint64_t ts);
@@ -381,8 +391,9 @@ provider erlang {
     /**
      * Fired when a process links to another process.
      *
-     * @param p the PID (string form) of the process
-     * @param p2 the PID (string form) of the process that p links to
+     * @param p the PID (in External Term Format as string) of the process
+     * @param p2 the PID (in External Term Format as string) of the process 
+     * that p links to
      * @param ts timestamp
      */ 
     probe process__link(char *p, char *p2, uint64_t ts);
@@ -390,8 +401,9 @@ provider erlang {
     /**
      * Fired when a process gets linked to another process.
      *
-     * @param p the PID (string form) of the process
-     * @param p2 the PID (string form) of the process that p gets linked to
+     * @param p the PID (in External Term Format as string) of the process
+     * @param p2 the PID (in External Term Format as string) of the process that 
+     * p gets linked to
      * @param ts timestamp
      */
     probe process__getting_linked(char *p, char *p2, uint64_t ts);
@@ -399,8 +411,9 @@ provider erlang {
     /**
      * Fired when a process gets unlinked from another process.
      *
-     * @param p the PID (string form) of the process
-     * @param p2 the PID (string form) of the process that p gets unlinked from
+     * @param p the PID (in External Term Format as string) of the process
+     * @param p2 the PID (in External Term Format as string) of the process 
+     * that p gets unlinked from
      * @param ts timestamp
      */
     probe process__getting_unlinked(char *p, char *p2, uint64_t ts);
@@ -408,8 +421,9 @@ provider erlang {
     /**
      * Fired when a process removes the link to another process.
      *
-     * @param p the PID (string form) of the process
-     * @param p2 the PID (string form) of the process that p removes the link to
+     * @param p the PID (in External Term Format as string) of the process
+     * @param p2 the PID (in External Term Format as string) of the process that 
+     * p removes the link to
      * @param ts timestamp
      */
     probe process__unlink(char *p, char *p2, uint64_t ts);
@@ -417,7 +431,8 @@ provider erlang {
     /**
      * Fired when a process is registered with a name.
      *
-     * @param p the PID (string form) of the registered process
+     * @param p the PID (in External Term Format as string) of the registered 
+     * process
      * @param name the name that is associated with the process
      * @param ts timestamp
      */
@@ -426,7 +441,8 @@ provider erlang {
     /**
      * Fired when a process is unregistered.
      *
-     * @param p the PID (string form) of the unregistered process
+     * @param p the PID (in External Term Format as string) of the unregistered 
+     * process
      * @param name the name that was associated with the process
      * @param ts timestamp
      */
@@ -435,7 +451,8 @@ provider erlang {
     /**
      * Fired when a process becomes active.
      *
-     * @param p the PID (string form) of the active process
+     * @param p the PID (in External Term Format as string) of the active 
+     * process
      * @param mfa the m:f/a of the function the process will run in
      * @param ts timestamp
      */
@@ -444,7 +461,8 @@ provider erlang {
     /**
      * Fired when a process becomes inactive.
      *
-     * @param p the PID (string form) of the inactive process
+     * @param p the PID (in External Term Format as string) of the inactive 
+     * process
      * @param mfa the m:f/a of the function the process was running
      * @param ts timestamp
      */
@@ -453,7 +471,8 @@ provider erlang {
     /**
      * Fired when a synchronous call that a process made to a port returns.
      *
-     * @param p the PID (string form) of the active process
+     * @param p the PID (in External Term Format as string) of the active 
+     * process
      * @param mfa the m:f/a of the function the process will run in
      * @param ts timestamp
      */
@@ -462,7 +481,8 @@ provider erlang {
     /**
      * Fired when a process makes a synchronous call to a port.
      *
-     * @param p the PID (string form) of the inactive process
+     * @param p the PID (in External Term Format as string) of the inactive 
+     * process
      * @param mfa the m:f/a of the function the process was running
      * @param ts timestamp
      */
@@ -548,9 +568,11 @@ provider erlang {
     /**
      * Fired when new port is opened.
      *
-     * @param process the PID (string form) of the process that opened the port
+     * @param process the PID (in External Term Format as string) of the process 
+     * that opened the port
      * @param port_name the string used when the port was opened
-     * @param port the port ID of the new port
+     * @param port the port ID (in External Term Format as string) of the new 
+     * port
      * @param ts timestamp
      */
     probe port__open(char *process, char *port_name, char *port, uint64_t ts);
@@ -579,8 +601,9 @@ provider erlang {
      * Fired when port is closed via port_close/1 (reason = 'normal')
      * or is sent an exit signal.
      *
-     * @param process the PID (string form) of the process that closed the port
-     * @param port the port ID of the port
+     * @param process the PID (in External Term Format as string) of the process 
+     * that closed the port
+     * @param port the port ID (in External Term Format as string) of the port
      * @param port_name the string used when the port was opened
      * @param reason the reason for the exit, e.g. 'normal'
      * @param ts timestamp
@@ -615,8 +638,9 @@ provider erlang {
     /**
      * Fired when a process links to a port.
      *
-     * @param p the PID (string form) of the process
-     * @param port the ID of the port that p links to
+     * @param p the PID (in External Term Format as string) of the process 
+     * @param port the port ID (in External Term Format as string) of the port 
+     * that p links to
      * @param ts timestamp
      */
     probe port__link(char *p, char *port, uint64_t ts);
@@ -624,8 +648,9 @@ provider erlang {
     /**
      * Fired when a process removes the link to a port.
      *
-     * @param p the PID (string form) of the process
-     * @param port the ID of the port that p removes the link to
+     * @param p the PID (in External Term Format as string) of the process
+     * @param port the port ID (in External Term Format as string) of the port 
+     * that p removes the link to
      * @param ts timestamp
      */
     probe port__unlink(char *p, char *port, uint64_t ts);
@@ -633,8 +658,9 @@ provider erlang {
     /**
      * Fired when a port gets linked to a process.
      *
-     * @param p the PID (string form) of the process
-     * @param port the ID of the port that gets linked to p
+     * @param p the PID (in External Term Format as string) of the process
+     * @param port the port ID (in External Term Format as string) of the port 
+     * that gets linked to p
      * @param ts timestamp
      */
     probe port__getting_linked(char *p, char *port, uint64_t ts);
@@ -642,8 +668,9 @@ provider erlang {
     /**
      * Fired when a port gets unlinked from a process.
      *
-     * @param p the PID (string form) of the process
-     * @param port the ID of the port that gets unlinked from p
+     * @param p the PID (in External Term Format as string) of the process
+     * @param port the port ID (in External Term Format as string) of the port 
+     * that gets unlinked from p
      * @param ts timestamp
      */
     probe port__getting_unlinked(char *p, char *port, uint64_t ts);
@@ -651,7 +678,8 @@ provider erlang {
     /**
      * Fired when a port is registered with a name.
      *
-     * @param p the port ID of the registered port
+     * @param p the port ID (in External Term Format as string) of the 
+     * registered port
      * @param name the name that is associated with the port
      * @param ts timestamp
      */
@@ -660,7 +688,8 @@ provider erlang {
     /**
      * Fired when a port is unregistered.
      *
-     * @param p the port ID of the registered port
+     * @param p the port ID (in External Term Format as string) of the
+     * registered port
      * @param name the name that was associated with the port
      * @param ts timestamp
      */
@@ -669,7 +698,8 @@ provider erlang {
     /**
      * Fired when a port becomes active.
      *
-     * @param p the port ID of the active port
+     * @param p the port ID (in External Term Format as string) of the active 
+     * port
      * @param ts timestamp
      */
     probe port__active(char *p, uint64_t ts);
@@ -677,7 +707,8 @@ provider erlang {
     /**
      * Fired when a port becomes inactive.
      *
-     * @param p the port ID of the inactive port
+     * @param p the port ID (in External Term Format as string) of the inactive 
+     * port
      * @param ts timestamp
      */
     probe port__inactive(char *p, uint64_t ts);

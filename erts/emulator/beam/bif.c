@@ -133,8 +133,8 @@ static int insert_internal_link(Process* p, Eterm rpid)
     if (DTRACE_ENABLED(process_getting_linked)) {
         DTRACE_CHARBUF(process_name, DTRACE_TERM_BUF_SIZE);
         DTRACE_CHARBUF(linked_process_name, DTRACE_TERM_BUF_SIZE);
-        dtrace_proc_str(rp, process_name);
-        dtrace_proc_str(p, linked_process_name);
+        dtrace_proc_bin(rp, process_name);
+        dtrace_proc_bin(p, linked_process_name);
         DTRACE3(process_getting_linked, process_name, linked_process_name, dtrace_ts());
     }
 #endif
@@ -163,16 +163,16 @@ BIF_RETTYPE link_1(BIF_ALIST_1)
         (is_internal_pid(BIF_ARG_1) || is_external_pid(BIF_ARG_1))) {
         DTRACE_CHARBUF(process_name, DTRACE_TERM_BUF_SIZE);
         DTRACE_CHARBUF(link_process_name, DTRACE_TERM_BUF_SIZE);
-        dtrace_proc_str(BIF_P, process_name);
-        dtrace_pid_str(BIF_ARG_1, link_process_name);
+        dtrace_proc_bin(BIF_P, process_name);
+        dtrace_pid_bin(BIF_ARG_1, link_process_name);
         DTRACE3(process_link, process_name, link_process_name, dtrace_ts());
     }
     else if(DTRACE_ENABLED(port_link) && 
         (is_internal_port(BIF_ARG_1) || is_external_port(BIF_ARG_1))) {
         DTRACE_CHARBUF(process_name, DTRACE_TERM_BUF_SIZE);
         DTRACE_CHARBUF(link_port_name, DTRACE_TERM_BUF_SIZE);
-        dtrace_proc_str(BIF_P, process_name);
-        dtrace_portid_str(BIF_ARG_1, link_port_name);
+        dtrace_proc_bin(BIF_P, process_name);
+        dtrace_portid_bin(BIF_ARG_1, link_port_name);
         DTRACE3(port_link, process_name, link_port_name, dtrace_ts());
     }
 #endif
@@ -994,16 +994,16 @@ BIF_RETTYPE unlink_1(BIF_ALIST_1)
         (is_internal_pid(BIF_ARG_1) || is_external_pid(BIF_ARG_1))) {
         DTRACE_CHARBUF(process_name, DTRACE_TERM_BUF_SIZE);
         DTRACE_CHARBUF(link_process_name, DTRACE_TERM_BUF_SIZE);
-        dtrace_proc_str(BIF_P, process_name);
-        dtrace_pid_str(BIF_ARG_1, link_process_name);
+        dtrace_proc_bin(BIF_P, process_name);
+        dtrace_pid_bin(BIF_ARG_1, link_process_name);
         DTRACE3(process_unlink, process_name, link_process_name, dtrace_ts());
     }
     else if(DTRACE_ENABLED(port_unlink) &&
         (is_internal_port(BIF_ARG_1) || is_external_port(BIF_ARG_1))) {
         DTRACE_CHARBUF(process_name, DTRACE_TERM_BUF_SIZE);
         DTRACE_CHARBUF(link_port_name, DTRACE_TERM_BUF_SIZE);
-        dtrace_proc_str(BIF_P, process_name);
-        dtrace_portid_str(BIF_ARG_1, link_port_name);
+        dtrace_proc_bin(BIF_P, process_name);
+        dtrace_portid_bin(BIF_ARG_1, link_port_name);
         DTRACE3(port_unlink, process_name, link_port_name, dtrace_ts());
     }
 #endif
@@ -1146,8 +1146,8 @@ BIF_RETTYPE unlink_1(BIF_ALIST_1)
         if (DTRACE_ENABLED(process_getting_unlinked)) {
             DTRACE_CHARBUF(process_name, DTRACE_TERM_BUF_SIZE);
             DTRACE_CHARBUF(unlinked_process_name, DTRACE_TERM_BUF_SIZE);
-            dtrace_proc_str(rp, process_name);
-            dtrace_pid_str(BIF_P->common.id, unlinked_process_name);
+            dtrace_proc_bin(rp, process_name);
+            dtrace_proc_bin(BIF_P, unlinked_process_name);
             DTRACE3(process_getting_unlinked, process_name, 
                     unlinked_process_name, dtrace_ts());
         }

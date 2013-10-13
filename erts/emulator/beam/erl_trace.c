@@ -2990,9 +2990,43 @@ profile_runnable_proc(Process *p, Eterm status){
 #endif
     erts_smp_mtx_unlock(&smq_mtx);
 }
+
 /* End system_profile tracing */
 
+void dtrace_encode_ext_as_string(Eterm t, char *buf) {
 
+    byte *bs;
+    byte *bptr;
+    Uint sz;
+    int i, j, c;
+
+    sz = erts_encode_ext_size(t);
+    bs = (byte *) erts_alloc(ERTS_ALC_T_TMP, sz);
+
+    bptr = bs;
+    erts_encode_ext(t, &bptr);
+    if (!(bptr <= bs + sz)) {
+        erl_exit(1, "Internal error in dtrace_term_to_bytes - Buffer overflow\n");
+    }
+
+    c = 0;
+    erts_sprintf(buf, "<<");
+    c = c + 2;
+
+    for (i = 0; i < sz; ++i) {
+
+        j = erts_sprintf(buf + c, "%d", (unsigned) bs[i]);
+        c = c + j;
+
+        if (i < (sz - 1)) {
+            erts_sprintf(buf + c, ",");
+            c = c + 1;
+        }
+    }
+    erts_sprintf(buf + c, ">>\0");
+
+    erts_free(ERTS_ALC_T_TMP, (void *) bs);
+}
 
 #ifdef ERTS_SMP
 

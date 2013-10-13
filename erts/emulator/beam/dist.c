@@ -337,8 +337,8 @@ static void doit_link_net_exits_sub(ErtsLink *sublnk, void *vlnecp)
             if (xres >= 0 && DTRACE_ENABLED(process_getting_unlinked)) {
                 DTRACE_CHARBUF(process_name, DTRACE_TERM_BUF_SIZE);
                 DTRACE_CHARBUF(unlinked_process_name, DTRACE_TERM_BUF_SIZE);
-                dtrace_proc_str(rp, process_name);
-                dtrace_pid_str(sublnk->pid, unlinked_process_name);
+                dtrace_proc_bin(rp, process_name);
+                dtrace_pid_bin(sublnk->pid, unlinked_process_name);
                 DTRACE3(process_getting_unlinked, process_name,
                         unlinked_process_name, dtrace_ts());
             }
@@ -844,9 +844,11 @@ erts_dsig_send_msg(ErtsDSigData *dsdp, Eterm remote, Eterm message)
     Sint tok_lastcnt = 0;
     Sint tok_serial = 0;
     Uint msize = 0;
-    DTRACE_CHARBUF(node_name, 64);
-    DTRACE_CHARBUF(sender_name, 64);
-    DTRACE_CHARBUF(receiver_name, 64);
+    DTRACE_CHARBUF(node_name, DTRACE_TERM_BUF_SIZE);
+    DTRACE_CHARBUF(sender_name, DTRACE_TERM_BUF_SIZE);
+    DTRACE_CHARBUF(receiver_name, DTRACE_TERM_BUF_SIZE);
+    DTRACE_CHARBUF(sender_pid, DTRACE_TERM_BUF_SIZE);
+    DTRACE_CHARBUF(receiver_pid, DTRACE_TERM_BUF_SIZE);
 #endif
 
     UseTmpHeapNoproc(5);
@@ -865,13 +867,15 @@ erts_dsig_send_msg(ErtsDSigData *dsdp, Eterm remote, Eterm message)
         erts_snprintf(node_name, sizeof(node_name), "%T", dsdp->dep->sysname);
         erts_snprintf(sender_name, sizeof(sender_name), "%T", sender->common.id);
         erts_snprintf(receiver_name, sizeof(receiver_name), "%T", remote);
+        dtrace_proc_bin(sender, sender_pid);
+        dtrace_pid_bin(remote, receiver_pid);
         msize = size_object(message);
         if (token != NIL && token != am_have_dt_utag) {
             tok_label = signed_val(SEQ_TRACE_T_LABEL(token));
             tok_lastcnt = signed_val(SEQ_TRACE_T_LASTCNT(token));
             tok_serial = signed_val(SEQ_TRACE_T_SERIAL(token));
         }
-        DTRACE7(message_send, sender_name, receiver_name,
+        DTRACE7(message_send, sender_pid, receiver_pid,
                 msize, tok_label, tok_lastcnt, tok_serial, dtrace_ts());
         DTRACE7(message_send_remote, sender_name, node_name, receiver_name,
                 msize, tok_label, tok_lastcnt, tok_serial);
@@ -901,9 +905,11 @@ erts_dsig_send_reg_msg(ErtsDSigData *dsdp, Eterm remote_name, Eterm message)
     Sint tok_lastcnt = 0;
     Sint tok_serial = 0;
     Uint32 msize = 0;
-    DTRACE_CHARBUF(node_name, 64);
-    DTRACE_CHARBUF(sender_name, 64);
-    DTRACE_CHARBUF(receiver_name, 128);
+    DTRACE_CHARBUF(node_name, DTRACE_TERM_BUF_SIZE);
+    DTRACE_CHARBUF(sender_name, DTRACE_TERM_BUF_SIZE);
+    DTRACE_CHARBUF(receiver_name, DTRACE_TERM_BUF_SIZE);
+    DTRACE_CHARBUF(sender_pid, DTRACE_TERM_BUF_SIZE);
+    DTRACE_CHARBUF(receiver_pid, DTRACE_TERM_BUF_SIZE);
 #endif
 
     UseTmpHeapNoproc(6);
@@ -923,13 +929,15 @@ erts_dsig_send_reg_msg(ErtsDSigData *dsdp, Eterm remote_name, Eterm message)
         erts_snprintf(sender_name, sizeof(sender_name), "%T", sender->common.id);
         erts_snprintf(receiver_name, sizeof(receiver_name),
                       "{%T,%s}", remote_name, node_name);
+        dtrace_proc_bin(sender, sender_pid);
+        dtrace_pid_bin(remote_name, receiver_pid);
         msize = size_object(message);
         if (token != NIL && token != am_have_dt_utag) {
             tok_label = signed_val(SEQ_TRACE_T_LABEL(token));
             tok_lastcnt = signed_val(SEQ_TRACE_T_LASTCNT(token));
             tok_serial = signed_val(SEQ_TRACE_T_SERIAL(token));
         }
-        DTRACE7(message_send, sender_name, receiver_name,
+        DTRACE7(message_send, sender_pid, receiver_pid,
                 msize, tok_label, tok_lastcnt, tok_serial, dtrace_ts());
         DTRACE7(message_send_remote, sender_name, node_name, receiver_name,
                 msize, tok_label, tok_lastcnt, tok_serial);
@@ -1253,8 +1261,8 @@ int erts_net_message(Port *prt,
         if (DTRACE_ENABLED(process_getting_linked)) { 
             DTRACE_CHARBUF(process_name, DTRACE_TERM_BUF_SIZE);
             DTRACE_CHARBUF(linked_process_name, DTRACE_TERM_BUF_SIZE);
-            dtrace_proc_str(rp, process_name);
-            dtrace_pid_str(from, linked_process_name);
+            dtrace_proc_bin(rp, process_name);
+            dtrace_pid_bin(from, linked_process_name);
             DTRACE3(process_getting_linked, process_name, linked_process_name, 
                     dtrace_ts());
         }
@@ -1289,8 +1297,8 @@ int erts_net_message(Port *prt,
         if (DTRACE_ENABLED(process_getting_unlinked) && lnk != NULL) {
             DTRACE_CHARBUF(process_name, DTRACE_TERM_BUF_SIZE);
             DTRACE_CHARBUF(unlinked_process_name, DTRACE_TERM_BUF_SIZE);
-            dtrace_proc_str(rp, process_name);
-            dtrace_pid_str(from, unlinked_process_name);
+            dtrace_proc_bin(rp, process_name);
+            dtrace_pid_bin(from, unlinked_process_name);
             DTRACE3(process_getting_unlinked, process_name,
                     unlinked_process_name, dtrace_ts());
         }
@@ -1627,8 +1635,8 @@ int erts_net_message(Port *prt,
                 if (xres >= 0 && DTRACE_ENABLED(process_getting_unlinked)) {
                     DTRACE_CHARBUF(process_name, DTRACE_TERM_BUF_SIZE);
                     DTRACE_CHARBUF(unlinked_process_name, DTRACE_TERM_BUF_SIZE);
-                    dtrace_proc_str(rp, process_name);
-                    dtrace_pid_str(from, unlinked_process_name);
+                    dtrace_proc_bin(rp, process_name);
+                    dtrace_pid_bin(from, unlinked_process_name);
                     DTRACE3(process_getting_unlinked, process_name,
                             unlinked_process_name, dtrace_ts());
         }
