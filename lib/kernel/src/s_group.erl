@@ -40,12 +40,13 @@
 	 own_nodes/0, own_nodes/1,
 	 own_s_groups/0,
 	 sync/0,
-	 new_s_group/2,
+	 new_s_group/1, new_s_group/2,
 	 add_nodes/2,
 	 info/0,
 	 delete_s_group/1, remove_nodes/2,
 	 choose_nodes/1,
- 	 monitor_nodes/1]).
+ 	 monitor_nodes/1,
+	 add_attribute/2, remove_attribute/2]).
 
 -export([publish_on_nodes/0, 
 	 get_own_nodes/0, get_own_nodes_with_errors/0,
@@ -54,7 +55,7 @@
 	 ng_pairs/1,
 	 new_s_group_check/4, s_group_conflict_check/1,
 	 delete_s_group_check/2, add_nodes_check/3, remove_nodes_check/3,
-	 add_attribute/2, remove_attribute/2]).
+	 record_state/0]).
 
 -export([connect_free_nodes/0, connect_s_group_nodes/1, is_free_normal/0]).
 
@@ -66,6 +67,9 @@
 -export([registered_names_test/1]).
 -export([send_test/2]).
 -export([whereis_name_test/1]).
+
+%% Imports
+-include_lib("kernel/include/file.hrl").
 
 %% Internal exports
 -export([sync_init/4]).
@@ -226,6 +230,20 @@ whereis_name(Node, SGroupName, Name) ->
 
 s_group_conflict_check(SGroupName) ->
     request({s_group_conflict_check, SGroupName}).
+
+-spec new_s_group(Nodes) -> {ok, SGroupName, Nodes} |
+      			    {error, Reason} when
+      Nodes :: [Node :: node()],
+      SGroupName :: group_name(),
+      Reason :: term().
+new_s_group(Nodes) ->
+    SGroupName = erlang:list_to_atom(erlang:binary_to_list(crypto:strong_rand_bytes(30))),
+    case new_s_group(SGroupName, Nodes) of
+        {error, s_group_name_is_in_use} ->
+	    new_s_group(Nodes);
+	Result ->
+	    Result
+    end.
 
 -spec new_s_group(SGroupName, Nodes) -> {ok, SGroupName, Nodes} |
       			                {error, Reason} when
@@ -444,6 +462,7 @@ init([]) ->
 		 true
 	 end,
     PT = publish_arg(),
+    _UpdateConfigFile = is_rsconfig(),
     case application:get_env(kernel, s_groups) of
 	undefined ->
 	    update_publish_nodes(PT),
@@ -862,6 +881,7 @@ handle_call({new_s_group, SGroupName, Nodes0}, _From, S) ->
 			   %%monitor = S#state.monitor,
                           },
             ?debug({"s_group_handle_new_s_group_NewS", NewS}),
+	    _UpdateConfigFile = is_rsconfig(NewS),
     	    spawn(?MODULE, connect_s_group_nodes, [Nodes--[node()]]),
 
             %% Fire the appropriate probes.
@@ -930,6 +950,7 @@ handle_call({new_s_group_check, Node, _PubType, SGroupName, Nodes}, _From, S) ->
 		  	   %%monitor = S#state.monitor
 		  	  },
              ?debug({"s_group_handle_new_s_group_check_NewS", NewS}),
+	     _UpdateConfigFile = is_rsconfig(NewS),
     	     spawn(?MODULE, connect_s_group_nodes, [Nodes--[node()]]),
     	     {reply, agreed, NewS}
     end;
@@ -1010,6 +1031,7 @@ handle_call({delete_s_group, SGroupName}, _From, S) ->
                    	   own_grps = NewOwnSGroups,
 		   	   other_grps = NewOtherSGroups
                    	   },
+	    _UpdateConfigFile = is_rsconfig(NewS),
 
             %% Fire the appropriate probes.
             case dyntrace:available() of
@@ -1085,6 +1107,7 @@ handle_call({delete_s_group_check, InitNode, SGroupName}, _From, S) ->
 		   other_grps = NewOtherSGroups
                    },
     ?debug({delete_s_group_check_NewS, NewS}),
+    _UpdateConfigFile = is_rsconfig(NewS),
     {reply, agreed, NewS};
 
 
@@ -1156,6 +1179,7 @@ handle_call({add_nodes, SGroupName, Nodes}, _From, S) ->
 				   %%monitor = S#state.monitor,
                                   },
                     ?debug({"s_group_handle_add_nodes_NewS", NewS}),
+		    _UpdateConfigFile = is_rsconfig(NewS),
     	    	    spawn(?MODULE, connect_s_group_nodes, [Nodes--[node()]]),
 
                     %% Fire the appropriate probes.
@@ -1223,6 +1247,7 @@ handle_call({add_nodes_check, Node, _PubType, {SGroupName, Nodes}}, _From, S) ->
 		  %%monitor = S#state.monitor
 		  },
     ?debug({"s_group_handle_add_nodes_check_NewS", NewS}),
+    _UpdateConfigFile = is_rsconfig(NewS),
     spawn(?MODULE, connect_s_group_nodes, [Nodes--[node()]]),
     {reply, agreed, NewS};
 
@@ -1290,6 +1315,7 @@ handle_call({remove_nodes, SGroupName, NodesToRmv0}, _From, S) ->
                	    		   %%sync_error = S#state.sync_error
 	   	    		   %%monitor = S#state.monitor,
                	    		   },
+                    _UpdateConfigFile = is_rsconfig(NewS),
 
                     %% Fire the appropriate probes.
                     case dyntrace:available() of
@@ -1337,6 +1363,7 @@ handle_call({remove_nodes_check, SGroupName, NewSGroupNodes, NodesToRmv}, _From,
                    sync_error = NewSyncError
 		   %%monitor = S#state.monitor,
                    },
+    _UpdateConfigFile = is_rsconfig(NewS),
     {reply, agreed, NewS};
 
 
@@ -1655,6 +1682,24 @@ handle_info({nodeup, Node}, S) when S#state.sync_state =:= no_conf ->
 handle_info({nodeup, Node}, S) ->
     ?debug({"NodeUp:",  node(), Node}),
     handle_node_up(Node, S);
+
+
+%%%====================================================================================
+%%% Updating s_group information in the node .config file
+%%%====================================================================================
+
+handle_info(record_state, S) ->
+    ?debug({"Record state:", node(), S}),
+    ConfigMsg = {calendar:local_time(), S},
+    case whereis(rsconfig) of
+        undefined ->
+	    RsconfigPid = spawn(?MODULE, record_state, []),
+	    register(rsconfig, RsconfigPid);
+	RsconfigPid ->
+	    true
+    end,
+    RsconfigPid ! ConfigMsg,
+    {noreply, S};
 
 
 %%%====================================================================================
@@ -2401,6 +2446,7 @@ connect_s_group_nodes(SGroupNodes) ->
 	  %%global:node_connected(Node)
     end, SGroupNodes).
 
+
 %%%====================================================================================
 %%% Sort s_groups and nodes in s_group configuration, i.e.
 %%% * Remove duplicate s_groups
@@ -2418,4 +2464,88 @@ update_conf(SGroupsT) ->
     NewSGroupsT.
 
 
+%%%====================================================================================
+%%% Keeping s_group information in LongNodeName.config file
+%%% 
+%%%====================================================================================
+is_rsconfig() ->
+    case init:get_argument(rsconfig) of
+        {ok, _Args} ->
+    	    s_group ! record_state;
+        _ ->
+            no
+    end.
 
+is_rsconfig(S) ->
+    case init:get_argument(rsconfig) of
+        {ok, _Args} ->
+    	    ConfigMsg = {calendar:local_time(), S},
+    	    case whereis(rsconfig) of
+                undefined ->
+	    	    RsconfigPid = spawn(?MODULE, record_state, []),
+	    	    register(rsconfig, RsconfigPid);
+	    	RsconfigPid ->
+	    	    true
+    	    end,
+    	    RsconfigPid ! ConfigMsg;
+        _ ->
+            no
+    end.
+
+record_state() ->
+    receive
+      {STime, S} ->
+          ?debug({"record_state_S", S}),
+    	  FileName = config_file_name(),
+    	  NewConfigData = config_to_file(S#state.own_grps),
+   	  case filelib:is_file(FileName) of
+	      true ->
+	          ?debug({"record_state_FileName", FileName}),
+	          case file:read_file_info(FileName) of
+	              {ok, FileInfo} ->
+		          ?debug({"record_state_FileInfo", FileInfo}),
+	                  case stime_lastmod_difference(STime, FileInfo#file_info.mtime) > 0 of
+		       	      true ->
+			          ?debug({"record_state_update"}),
+		  		  write_data(FileName, NewConfigData);
+			      _ ->
+				  ?debug({"record_state", the_info_is_aready_up_to_date})
+		           end;
+	    	      _ ->
+		          ?debug({"record_state", error_cannot_read_file})
+	          end;
+	      _ ->
+	          ?debug({"record_state", file_does_not_exist}),
+		  write_data(FileName, NewConfigData)
+	  end,
+    	  record_state()
+    end.
+
+write_data(FileName, Data) ->
+    case file:open(FileName, [read,write]) of
+        {ok, FileId} ->
+    	    ?debug({"write_data_FileId", FileId}),
+    	    file:write_file(FileName, io_lib:fwrite("~p.\n", [Data])),
+    	    file:close(FileId);
+    	_ ->
+    	    ?debug({"write_data_error", cannot_open_file})
+    end.
+
+config_file_name() ->
+    erlang:list_to_atom(string:concat(erlang:atom_to_list(node()), ".config")).
+
+config_to_file(OwnGroups) ->
+    [{kernel, [{s_groups, own_grps_to_config(OwnGroups)}]}].
+
+own_grps_to_config(OwnGroups) ->
+    own_grps_to_config(OwnGroups, []).
+
+own_grps_to_config([], Config) ->
+   Config;
+own_grps_to_config([{Group, Nodes} | OwnGroups], Config) ->
+    own_grps_to_config(OwnGroups, [{Group, normal, Nodes} | Config]).
+
+stime_lastmod_difference(STime, LastModified) ->
+    STimeSec = calendar:datetime_to_gregorian_seconds(STime),
+    LastModifiedSec = calendar:datetime_to_gregorian_seconds(LastModified),
+    STimeSec - LastModifiedSec.
