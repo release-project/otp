@@ -844,7 +844,7 @@ erts_dsig_send_msg(ErtsDSigData *dsdp, Eterm remote, Eterm message)
     Sint tok_lastcnt = 0;
     Sint tok_serial = 0;
     Uint msize = 0;
-    DTRACE_CHARBUF(node_name, DTRACE_TERM_BUF_SIZE);
+    DTRACE_CHARBUF(node_name, 64);
     DTRACE_CHARBUF(sender_name, DTRACE_TERM_BUF_SIZE);
     DTRACE_CHARBUF(receiver_name, DTRACE_TERM_BUF_SIZE);
     DTRACE_CHARBUF(sender_pid, DTRACE_TERM_BUF_SIZE);
@@ -864,7 +864,7 @@ erts_dsig_send_msg(ErtsDSigData *dsdp, Eterm remote, Eterm message)
 #ifdef USE_VM_PROBES
     *node_name = *sender_name = *receiver_name = '\0';
     if (DTRACE_ENABLED(message_send) || DTRACE_ENABLED(message_send_remote)) {
-        erts_snprintf(node_name, sizeof(node_name), "%T", dsdp->dep->sysname);
+        erts_snprintf(node_name, 64, "%T", dsdp->dep->sysname);
         erts_snprintf(sender_name, sizeof(sender_name), "%T", sender->common.id);
         erts_snprintf(receiver_name, sizeof(receiver_name), "%T", remote);
         dtrace_proc_bin(sender, sender_pid);
@@ -905,7 +905,7 @@ erts_dsig_send_reg_msg(ErtsDSigData *dsdp, Eterm remote_name, Eterm message)
     Sint tok_lastcnt = 0;
     Sint tok_serial = 0;
     Uint32 msize = 0;
-    DTRACE_CHARBUF(node_name, DTRACE_TERM_BUF_SIZE);
+    DTRACE_CHARBUF(node_name, 64);
     DTRACE_CHARBUF(sender_name, DTRACE_TERM_BUF_SIZE);
     DTRACE_CHARBUF(receiver_name, DTRACE_TERM_BUF_SIZE);
     DTRACE_CHARBUF(sender_pid, DTRACE_TERM_BUF_SIZE);
@@ -925,7 +925,7 @@ erts_dsig_send_reg_msg(ErtsDSigData *dsdp, Eterm remote_name, Eterm message)
 #ifdef USE_VM_PROBES
     *node_name = *sender_name = *receiver_name = '\0';
     if (DTRACE_ENABLED(message_send) || DTRACE_ENABLED(message_send_remote)) {
-        erts_snprintf(node_name, sizeof(node_name), "%T", dsdp->dep->sysname);
+        erts_snprintf(node_name, 64, "%T", dsdp->dep->sysname);
         erts_snprintf(sender_name, sizeof(sender_name), "%T", sender->common.id);
         erts_snprintf(receiver_name, sizeof(receiver_name),
                       "{%T,%s}", remote_name, node_name);
