@@ -45,8 +45,7 @@
 	 info/0,
 	 delete_s_group/1, remove_nodes/2,
 	 choose_nodes/1,
- 	 monitor_nodes/1,
-	 add_attribute/2, remove_attribute/2]).
+ 	 monitor_nodes/1]).
 
 -export([publish_on_nodes/0, 
 	 get_own_nodes/0, get_own_nodes_with_errors/0,
@@ -55,9 +54,10 @@
 	 ng_pairs/1,
 	 new_s_group_check/4, s_group_conflict_check/1,
 	 delete_s_group_check/2, add_nodes_check/3, remove_nodes_check/3,
+ 	 add_attribute/2, remove_attribute/2,
 	 record_state/0]).
 
--export([connect_free_nodes/0, connect_s_group_nodes/1, is_free_normal/0]).
+-export([connect_free_nodes/1, connect_s_group_nodes/1, is_free_normal/0]).
 
 %% Delete?
 %-export([s_groups_changed/1]).
@@ -319,7 +319,7 @@ delete_s_group(SGroupName) ->
         ok ->
 	    case application:get_env(kernel, s_groups) of
 	        undefined ->
-		    connect_free_nodes();
+		    connect_free_nodes(node());
 		_ ->
 		    ok
 	    end,
@@ -466,13 +466,15 @@ init([]) ->
     case application:get_env(kernel, s_groups) of
 	undefined ->
 	    update_publish_nodes(PT),
-	    {ok, #state{publish_type = PT,
-			connect_all = Ca}};
+	    NewState = #state{publish_type = PT,
+			      connect_all = Ca},
+	    {ok, NewState};
 	{ok, []} ->
 	    update_publish_nodes(PT),
 	    application:unset_env(kernel, s_groups),
-	    {ok, #state{publish_type = PT,
-			connect_all = Ca}};
+	    NewState = #state{publish_type = PT,
+			      connect_all = Ca},
+	    {ok, NewState};
 	{ok, NodeGrps0} ->
 	    ?debug({"s_group_init_NodeGrps", NodeGrps0}),
 	    NodeGrps = update_conf(NodeGrps0),
@@ -480,8 +482,9 @@ init([]) ->
 	        [] ->
 		    update_publish_nodes(PT),
 	    	    application:unset_env(kernel, s_groups),
-	    	    {ok, #state{publish_type = PT,
-			        connect_all = Ca}};
+		    NewState = #state{publish_type = PT,
+			              connect_all = Ca},
+	    	    {ok, NewState};
 		_ ->
 	    	    AllNodes = lists:append([Nds || {_G, _T, Nds} <- NodeGrps]),
 	    	    case lists:member(node(), AllNodes) of
@@ -1073,7 +1076,7 @@ handle_call({delete_s_group_check, InitNode, SGroupName}, _From, S) ->
 
 	    update_publish_nodes(S#state.publish_type),
 
-	    spawn(?MODULE, connect_free_nodes, []);
+	    spawn(?MODULE, connect_free_nodes, [InitNode]);
 	_ ->
 	    NewConf = dlt_from_s_group_tuples(SGroupName),
 	    application:set_env(kernel, s_groups, NewConf),
@@ -1303,7 +1306,6 @@ handle_call({remove_nodes, SGroupName, NodesToRmv0}, _From, S) ->
 
 		    %% Disconnect NodesToRmv
 	    	    disconnect_nodes(NodesToDisconnect),
-
 		    update_publish_nodes(S#state.publish_type, {normal, NewOwnNodes}),
 
 		    NewS = S#state{sync_state = synced, 
@@ -1683,6 +1685,18 @@ handle_info({nodeup, Node}, S) ->
     ?debug({"NodeUp:",  node(), Node}),
     handle_node_up(Node, S);
 
+handle_info({nodeup, no_group, Node}, S) ->
+    case application:get_env(kernel, s_groups) of 
+        undefined ->
+            ?debug({"NodeUp:", node(), Node}),
+            send_monitor(S#state.monitor, {nodeup, Node}, S#state.sync_state),
+	    ?debug({"S", S}),
+            global_name_server ! {nodeup, no_group, Node},
+            {global_name_server, Node} ! {nodeup, no_group, node()},
+            {noreply, S};
+        _ ->
+         {noreply, S}
+    end;
 
 %%%====================================================================================
 %%% Updating s_group information in the node .config file
@@ -2390,24 +2404,14 @@ s_group_conflict(Nodes, CCArgs) ->
     ?debug({"s_group_conflict_NewNodes:", NewNodes}),
     lists:usort(NewNodes).
 
-connect_free_nodes() ->
+connect_free_nodes(InitNode) ->
     case is_free_normal() of
 	yes ->
-	    ConnectedNodes = lists:usort(nodes(connected)--[node()]),
+	    ConnectedNodes = lists:usort(nodes(connected)--[node(), InitNode]),
 	    ?debug({"connect_free_nodes_ConnectedNodes", ConnectedNodes}),
-	    FreeNodes = 
-	        lists:foldl(fun(Node, FreeNodes_acc) ->
-	    	          case rpc:call(Node, s_group, is_free_normal, []) of
-                               yes ->
-			           [Node | FreeNodes_acc];
-                               _ ->
-                                   FreeNodes_acc
-                          end
-	        end, [], ConnectedNodes),
 	    lists:foreach(fun(Node) ->
-                  {s_group, Node} ! {nodeup, node()},
-		  global:node_connected(Node)
-            end, FreeNodes);
+                  {s_group, Node} ! {nodeup, no_group, node()}
+            end, ConnectedNodes);
 	_ ->
 	    ok
     end.
@@ -2443,7 +2447,6 @@ overlap_nodes([Nodes | ListOfNodes], OverlapNodes) ->
 connect_s_group_nodes(SGroupNodes) ->
     lists:foreach(fun(Node) ->
           {s_group, Node} ! {nodeup, node()}
-	  %%global:node_connected(Node)
     end, SGroupNodes).
 
 
