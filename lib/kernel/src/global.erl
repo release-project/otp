@@ -58,7 +58,7 @@
 
 -include_lib("stdlib/include/ms_transform.hrl").
 
-%% Set this variable to 'allow' several names of a process.
+%% Set this variable to 'allow' to allow several names of a process.
 %% This is for backward compatibility only; the functionality is broken.
 -define(WARN_DUPLICATED_NAME, global_multi_name_action).
 
@@ -330,7 +330,8 @@ register_name(Name, Pid, Resolve) when is_pid(Pid) ->
       Pid :: pid(),
       Resolve :: method() | undefined,
       Reason :: term().
-register_name(SGroupName, Name, Pid, Method) when is_pid(Pid) ->
+register_name(SGroupName, Name, Pid, Method0) when is_pid(Pid) ->
+    Method = allow_tuple_fun(Method0),
     Fun = fun(Nodes) ->
         case (where(SGroupName, Name) =:= undefined) andalso
 	      check_dupname(SGroupName, Name, Pid) of
@@ -424,7 +425,8 @@ re_register_name(Name, Pid, Method) when is_pid(Pid) ->
       Pid :: pid(),
       Resolve :: method(),
       Reason :: term().
-re_register_name(SGroupName, Name, Pid, Method) when is_pid(Pid) ->
+re_register_name(SGroupName, Name, Pid, Method0) when is_pid(Pid) ->
+    Method = allow_tuple_fun(Method0),
     Fun = fun(Nodes) ->
         case check_dupname(SGroupName, Name, Pid) of
             true ->
@@ -612,7 +614,7 @@ unregister_foreign_names() ->
     request({unregister_foreign_names}).
 
 %%-----------------------------------------------------------------
-%% Adding, removeing, and listing attributes
+%% Adding, removing, and listing attributes
 %%-----------------------------------------------------------------
 -spec add_attribute(Args) -> {ok, Args} | {error, Reason} when
       Args :: [term()],
@@ -913,6 +915,7 @@ handle_call(Request, From, S) ->
 %%========================================================================
 %% init_connect
 %%========================================================================
+
 -spec handle_cast(term(), state()) -> {'noreply', state()}.
 
 handle_cast({init_connect, Vsn, Node, InitMsg}, S) ->
@@ -2847,7 +2850,7 @@ trace_message(M, X) ->
 %%-----------------------------------------------------------------
 %% Each sync process corresponds to one call to sync. Each such
 %% process asks the global_name_server on all Nodes if it is in sync
-%% with Nodes. If not, then (other) node spawns a syncer process that
+%% with Nodes. If not, that (other) node spawns a syncer process that
 %% waits for global to get in sync with all Nodes. When it is in
 %% sync, the syncer process tells the original sync process about it.
 %%-----------------------------------------------------------------
@@ -3326,6 +3329,16 @@ new_known([Group|SGroups], Known, AddedSGroupNodes) ->
     ?debug({"new_nodes_s_NewKnown", NewKnown}),
     new_known(SGroups, NewKnown, AddedSGroupNodes).
 
+
+%% -------------------------------------------------------
+%% Added in main branch some time after s_group changes
+%% -------------------------------------------------------
+
+%% Support legacy tuple funs as resolve functions.
+allow_tuple_fun({M, F}) when is_atom(M), is_atom(F) ->
+    fun M:F/3;
+allow_tuple_fun(Fun) when is_function(Fun, 3) ->
+    Fun.
 
 
 
