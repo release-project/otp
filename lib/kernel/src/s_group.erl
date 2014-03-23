@@ -1,7 +1,7 @@
 %%
 %% %CopyrightBegin%
 %% 
-%% Copyright Ericsson AB 1998-2011. All Rights Reserved.
+%% Copyright Ericsson AB 1998-2013. All Rights Reserved.
 %% 
 %% The contents of this file are subject to the Erlang Public License,
 %% Version 1.1, (the "License"); you may not use this file except in
@@ -142,7 +142,7 @@ monitor_nodes(Flag) ->
 -spec own_nodes() -> Nodes when
       Nodes :: [Node :: node()].
 own_nodes() ->
-    request({own_nodes}).
+    request(own_nodes).
 
 -spec own_nodes(SGroupName) -> Nodes when
       SGroupName :: group_name(),
@@ -619,7 +619,7 @@ handle_call({monitor_nodes, Flag}, {Pid, _}, StateIn) ->
 %%%
 %%% Get a list of nodes in the own s_groups
 %%%====================================================================================
-handle_call({own_nodes}, _From, S) ->
+handle_call(own_nodes, _From, S) ->
     Nodes = case S#state.sync_state of
 		no_conf ->
 		    lists:usort([node() | global:get_known()]);

@@ -58,7 +58,7 @@
 
 -include_lib("stdlib/include/ms_transform.hrl").
 
-%% Set this variable to 'allow' several names of a process.
+%% Set this variable to 'allow' to allow several names of a process.
 %% This is for backward compatibility only; the functionality is broken.
 -define(WARN_DUPLICATED_NAME, global_multi_name_action).
 
@@ -330,7 +330,8 @@ register_name(Name, Pid, Resolve) when is_pid(Pid) ->
       Pid :: pid(),
       Resolve :: method() | undefined,
       Reason :: term().
-register_name(SGroupName, Name, Pid, Method) when is_pid(Pid) ->
+register_name(SGroupName, Name, Pid, Method0) when is_pid(Pid) ->
+    Method = allow_tuple_fun(Method0),
     Fun = fun(Nodes) ->
         case (where(SGroupName, Name) =:= undefined) andalso
 	      check_dupname(SGroupName, Name, Pid) of
@@ -410,13 +411,14 @@ re_register_name(Name, Pid) when is_pid(Pid) ->
       Pid :: pid(),
       Resolve :: method(),
       Reason :: term().
-re_register_name(Name, Pid, Method) when is_pid(Pid) ->
-     case application:get_env(kernel, s_groups) of
+re_register_name(Name, Pid, Method0) when is_pid(Pid) ->
+    Method = allow_tuple_fun(Method0),
+    case application:get_env(kernel, s_groups) of
      	  undefined ->
 	  	re_register_name(undefined, Name, Pid, Method);
 	  _ ->
 		{no, the_node_is_not_free}
-     end.
+    end.
 
 -spec re_register_name(SGroupName, Name, Pid, Resolve) -> 'yes' | {no, Reason} when
       SGroupName :: group_name(),
@@ -424,7 +426,8 @@ re_register_name(Name, Pid, Method) when is_pid(Pid) ->
       Pid :: pid(),
       Resolve :: method(),
       Reason :: term().
-re_register_name(SGroupName, Name, Pid, Method) when is_pid(Pid) ->
+re_register_name(SGroupName, Name, Pid, Method0) when is_pid(Pid) ->
+    Method = allow_tuple_fun(Method0),
     Fun = fun(Nodes) ->
         case check_dupname(SGroupName, Name, Pid) of
             true ->
@@ -612,7 +615,7 @@ unregister_foreign_names() ->
     request({unregister_foreign_names}).
 
 %%-----------------------------------------------------------------
-%% Adding, removeing, and listing attributes
+%% Adding, removing, and listing attributes
 %%-----------------------------------------------------------------
 -spec add_attribute(Args) -> {ok, Args} | {error, Reason} when
       Args :: [term()],
@@ -1281,6 +1284,7 @@ handle_info({whereis, Name, From}, S) ->
     {noreply, S};
 
 handle_info(known, S) ->
+    io:format(">>>> ~p\n",[S#state.known]),
     {noreply, S};
 
 handle_info({init_own_s_groups, OwnSGroups}, S0) ->
@@ -2809,8 +2813,7 @@ random_sleep(Times) ->
     case get(random_seed) of
 	undefined ->
 	    {A1, A2, A3} = now(),
-	    _ = random:seed(A1, A2, A3 + erlang:phash(node(), 100000)),
-            ok;
+	    random:seed(A1, A2, A3 + erlang:phash(node(), 100000));
 	_ -> ok
     end,
     %% First time 1/4 seconds, then doubling each time up to 8 seconds max.
@@ -2966,6 +2969,13 @@ intersection(_, []) ->
     [];
 intersection(L1, L2) ->
     L1 -- (L1 -- L2).
+
+
+%% Support legacy tuple funs as resolve functions.
+allow_tuple_fun({M, F}) when is_atom(M), is_atom(F) ->
+    fun M:F/3;
+allow_tuple_fun(Fun) when is_function(Fun, 3) ->
+    Fun.
 
 %%%------------------------------------------------------------------
 %% Additional functions
