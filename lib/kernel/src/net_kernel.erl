@@ -1343,7 +1343,7 @@ start_protos(Name, [Proto | Ps], Node, Ls) ->
 	    error_logger:info_msg("Protocol: ~tp: not supported~n", [Proto]),
 	    start_protos(Name,Ps, Node, Ls);
 	{'EXIT', Reason} ->
-	    error_logger:info_msg("Protocol: ~tp: register error: ~p~n",
+	    error_logger:info_msg("Protocol: ~tp: register error: ~tp~n",
 				  [Proto, Reason]),
 	    start_protos(Name,Ps, Node, Ls);
 	{error, duplicate_name} ->
@@ -1353,7 +1353,7 @@ start_protos(Name, [Proto | Ps], Node, Ls) ->
 				  [Proto]),
 	    start_protos(Name,Ps, Node, Ls);
 	{error, Reason} ->
-	    error_logger:info_msg("Protocol: ~tp: register/listen error: ~p~n",
+	    error_logger:info_msg("Protocol: ~tp: register/listen error: ~tp~n",
 				  [Proto, Reason]),
 	    start_protos(Name,Ps, Node, Ls)
     end;
